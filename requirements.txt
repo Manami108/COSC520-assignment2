@@ -1,0 +1,2 @@
+# Optional plotting dependency; algorithms/benchmarks/tests use standard Python.
+matplotlib>=3.8,<4

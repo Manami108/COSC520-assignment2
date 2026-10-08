@@ -1,0 +1,3 @@
+
+[plots]
+matplotlib<4,>=3.8

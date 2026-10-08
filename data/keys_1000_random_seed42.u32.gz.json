@@ -1,0 +1,15 @@
+{
+  "format": "gzip of little-endian uint32; no binary header",
+  "n": 1000,
+  "order": "random",
+  "seed": 42,
+  "unique": true,
+  "key_min": 0,
+  "key_max": 999,
+  "uncompressed_bytes": 4000,
+  "compressed_bytes": 2072,
+  "sha256": "6464a69df078a7479e71eb830064c1da78acc699e8f0752936d434abaac845d5",
+  "filename": "keys_1000_random_seed42.u32.gz",
+  "python_version": "3.12.14",
+  "generator": "array(I, range(n)) with seeded random.shuffle for random order"
+}

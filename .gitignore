@@ -1,0 +1,61 @@
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Testing and development
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Python build files
+build/
+dist/
+*.egg-info/
+
+# macOS and Windows system files
+.DS_Store
+Thumbs.db
+
+# IDE settings
+.vscode/
+.idea/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# Raw and private research data
+data/raw/
+data/private/
+data/processed/
+
+# Generated outputs
+outputs/
+logs/
+*.log
+
+# Machine learning model files
+checkpoints/
+models/
+runs/
+wandb/
+mlruns/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+pytorch_model.bin
+
+# Temporary files
+*.tmp
+*.bak

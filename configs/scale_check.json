@@ -1,0 +1,11 @@
+{
+  "sizes": [100000, 1000000],
+  "orders": ["random"],
+  "workloads": ["uniform"],
+  "repeats": 1,
+  "queries": 2000,
+  "updates": 1000,
+  "warmup": 200,
+  "seed": 42,
+  "validate_limit": 100000
+}
