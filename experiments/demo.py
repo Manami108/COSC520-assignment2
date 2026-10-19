@@ -1,23 +1,28 @@
-"""Small, deterministic demonstration of all three ordered-set interfaces."""
+"""Small demonstration of the three ordered-set implementations.
+
+Run from project root: python -m experiments.demo
+AI-assisted draft: review and disclose its use in the assignment.
+"""
 
 from structures import TREE_TYPES, make_tree
 
 
 def main():
-    """Input: none. Output: validated insert/search/delete demonstrations."""
+    """Input: none. Output: example results for insert/search/delete."""
     for name in TREE_TYPES:
         tree = make_tree(name)
+        for key in (40, 20, 60, 10, 30, 50, 70):
+            tree.insert(key)
+
         print(f"\n{name.upper()}")
-        for key in (30, 10, 20, 50, 40):
-            print(f"  insert({key}) -> {tree.insert(key)}")
-        print(f"  insert(20) again -> {tree.insert(20)}")
-        print(f"  contains(40) -> {tree.contains(40)}")
-        print(f"  contains(99) -> {tree.contains(99)}")
-        print(f"  delete(30) -> {tree.delete(30)}")
-        print(f"  delete(99) -> {tree.delete(99)}")
-        tree.validate()
-        print(f"  sorted keys -> {list(tree.inorder())}")
-        print(f"  live keys -> {len(tree)}; array storage -> {tree.storage_bytes()} bytes")
+        print("After insert:", list(tree.inorder()))
+        print("Search 30:", tree.search(30))
+        print("Search 99:", tree.search(99))
+        print("Duplicate 30:", tree.insert(30))
+        print("Delete 40:", tree.delete(40))
+        print("After delete:", list(tree.inorder()))
+        print("Height:", tree.height())
+        print("Array storage (bytes):", tree.storage_bytes())
 
 
 if __name__ == "__main__":
