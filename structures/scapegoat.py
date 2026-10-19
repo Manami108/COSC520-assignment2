@@ -1,52 +1,91 @@
-"""Bottom-up splay tree with explicit zig, zig-zig, and zig-zag cases."""
+"""Scapegoat ordered set: partial rebuilding with alpha = 2/3.
+
+Uses ordinary BST links and the packed storage from ``base.py``. Scapegoat
+nodes need no height or subtree-size metadata.
+"""
+
+from array import array
+import math
 
 from .base import NULL, PackedBST
 
 
-class SplayTree(PackedBST):
-    """Amortized O(log n) operations; an individual operation can take O(n)."""
+LOG_3_OVER_2 = math.log(1.5)
+
+
+class ScapegoatTree(PackedBST):
+    """Scapegoat BST: worst-case logarithmic search, amortized updates."""
 
     def __init__(self):
-        """Input: none. Output: an empty tree without balancing metadata."""
+        """Input: none. Output: an empty Scapegoat Tree."""
         super().__init__()
+        # q counts successful insertions since the last full rebuild, plus
+        # the size at that rebuild. It is an upper bound on the live-node count.
+        self.max_size = 0
 
-    def _splay(self, node):
-        """Input: live node. Output: none; move it to the root by rotations."""
-        while self.parent[node] != NULL:
-            parent = self.parent[node]
-            grand = self.parent[parent]
-            if grand == NULL:
-                if self.left[parent] == node:
-                    self._rotate_right(parent)
-                else:
-                    self._rotate_left(parent)
-            elif self.left[grand] == parent and self.left[parent] == node:
-                self._rotate_right(grand)
-                self._rotate_right(parent)
-            elif self.right[grand] == parent and self.right[parent] == node:
-                self._rotate_left(grand)
-                self._rotate_left(parent)
-            elif self.left[grand] == parent:
-                self._rotate_left(parent)
-                self._rotate_right(grand)
+    def _subtree_size(self, node):
+        """Input: subtree root. Output: number of nodes in that subtree."""
+        if node == NULL:
+            return 0
+        count = 0
+        stack = [node]
+        while stack:
+            current = stack.pop()
+            count += 1
+            if self.left[current] != NULL:
+                stack.append(self.left[current])
+            if self.right[current] != NULL:
+                stack.append(self.right[current])
+        return count
+
+    def _rebuild(self, node):
+        """Input: subtree root. Output: none; rebuild it into balanced form.
+
+        Reuses the existing node indices, preserving parent links and the
+        surrounding tree. An iterative rebuild avoids Python recursion limits.
+        """
+        if node == NULL:
+            return
+        parent = self.parent[node]
+        was_left = parent != NULL and self.left[parent] == node
+
+        # Collect nodes in increasing key order, without copying their keys.
+        ordered = array("i")
+        stack = []
+        current = node
+        while stack or current != NULL:
+            while current != NULL:
+                stack.append(current)
+                current = self.left[current]
+            current = stack.pop()
+            ordered.append(current)
+            current = self.right[current]
+
+        # Divide the sorted indices around each median (iterative recursion).
+        pending = [(0, len(ordered), parent, was_left)]
+        while pending:
+            begin, end, parent, is_left = pending.pop()
+            if begin >= end:
+                continue
+            middle = (begin + end) // 2
+            current = ordered[middle]
+            self.parent[current] = parent
+            self.left[current] = NULL
+            self.right[current] = NULL
+            if parent == NULL:
+                self.root = current
+            elif is_left:
+                self.left[parent] = current
             else:
-                self._rotate_right(parent)
-                self._rotate_left(grand)
-
-    def contains(self, key):
-        """Input: integer key. Output: membership; splay match or last visit."""
-        self._check_key(key)
-        found, last = self._find(key)
-        if last != NULL:
-            self._splay(last)
-        return found != NULL
+                self.right[parent] = current
+            pending.append((middle + 1, end, current, False))
+            pending.append((begin, middle, current, True))
 
     def insert(self, key):
-        """Input: integer key. Output: addition success; splay new/existing key."""
+        """Input: integer key. Output: True if added, False if duplicate."""
         self._check_key(key)
         found, parent = self._find(key)
         if found != NULL:
-            self._splay(found)
             return False
         node = self._allocate(key, parent)
         if parent == NULL:
@@ -55,29 +94,71 @@ class SplayTree(PackedBST):
             self.left[parent] = node
         else:
             self.right[parent] = node
-        self._splay(node)
-        return True
+        self.max_size += 1
+
+        depth = 0
+        current = node
+        while self.parent[current] != NULL:
+            depth += 1
+            current = self.parent[current]
+        if depth <= math.log(self.max_size) / LOG_3_OVER_2 + 1e-12:
+            return True
+
+        # Find the first ancestor with a child occupying > 2/3 of its nodes.
+        # Along this path the sibling subtrees are disjoint: calculating their
+        # sizes costs O(size of the eventually rebuilt subtree) in total.
+        child = node
+        child_size = 1
+        while self.parent[child] != NULL:
+            parent = self.parent[child]
+            sibling = self.right[parent] if self.left[parent] == child else self.left[parent]
+            parent_size = 1 + child_size + self._subtree_size(sibling)
+            if 3 * child_size > 2 * parent_size:
+                self._rebuild(parent)
+                return True
+            child, child_size = parent, parent_size
+        raise AssertionError("Insertion exceeded the height bound without a scapegoat")
 
     def delete(self, key):
-        """Input: integer key. Output: removal success; join the two subtrees."""
-        if not self.contains(key):
+        """Input: integer key. Output: True if removed, False if absent."""
+        self._check_key(key)
+        node, _ = self._find(key)
+        if node == NULL:
             return False
-        node = self.root
-        left, right = self.left[node], self.right[node]
-        if left != NULL:
-            self.parent[left] = NULL
-        if right != NULL:
-            self.parent[right] = NULL
+        if self.left[node] != NULL and self.right[node] != NULL:
+            successor = self.right[node]
+            while self.left[successor] != NULL:
+                successor = self.left[successor]
+            self.keys[node] = self.keys[successor]
+            node = successor
+        child = self.left[node] if self.left[node] != NULL else self.right[node]
+        self._replace(node, child)
         self._release(node)
-        if left == NULL:
-            self.root = right
+
+        # Full rebuilding after enough deletions bounds height by O(log n).
+        if 2 * self.size < self.max_size:
+            if self.root != NULL:
+                self._rebuild(self.root)
+            self.max_size = self.size
+        return True
+
+    def validate(self):
+        """Input: none. Output: True; verify BST links and height bound."""
+        super().validate()
+        if self.size == 0:
+            assert self.max_size == 0, "Historical size should reset when empty"
+        else:
+            assert self.size <= self.max_size <= 2 * self.size, "Historical size bound violated"
+        if self.root == NULL:
             return True
-        self.root = left
-        maximum = left
-        while self.right[maximum] != NULL:
-            maximum = self.right[maximum]
-        self._splay(maximum)
-        self.right[self.root] = right
-        if right != NULL:
-            self.parent[right] = self.root
+        max_depth = 0
+        stack = [(self.root, 0)]
+        while stack:
+            node, depth = stack.pop()
+            max_depth = max(max_depth, depth)
+            if self.left[node] != NULL:
+                stack.append((self.left[node], depth + 1))
+            if self.right[node] != NULL:
+                stack.append((self.right[node], depth + 1))
+        assert max_depth <= math.log(self.max_size) / LOG_3_OVER_2 + 1e-10, "Height bound violated"
         return True

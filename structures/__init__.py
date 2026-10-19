@@ -2,7 +2,7 @@
 
 from .avl import AVLTree
 from .treap import Treap
-from .splay import SplayTree
+from .scapegoat import SplayTree
 
 TREE_TYPES = {"avl": AVLTree, "treap": Treap, "splay": SplayTree}
 

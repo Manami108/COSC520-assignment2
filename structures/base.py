@@ -1,7 +1,7 @@
-"""Hand-written, iterative binary-search-tree primitives over packed arrays.
+"""Shared, iterative binary-search-tree operations using compact arrays.
 
-AI-generated reference code; see docs/AI_USAGE.md before academic submission.
-Arrays store raw values, not a library implementation of any tree algorithm.
+Arrays store node data; balancing is implemented by the tree subclasses.
+AI-assisted reference code; disclose its use in the assignment report.
 """
 
 from array import array
@@ -131,11 +131,29 @@ class PackedBST:
             yield self.keys[node]
             node = self.right[node]
 
+    def height(self):
+        """Input: none. Output: tree height in nodes (empty tree has height 0).
+
+        Iterative O(n) diagnostic, intended for analysis outside timed operations.
+        """
+        if self.root == NULL:
+            return 0
+        maximum = 0
+        stack = [(self.root, 1)]
+        while stack:
+            node, depth = stack.pop()
+            maximum = max(maximum, depth)
+            if self.left[node] != NULL:
+                stack.append((self.left[node], depth + 1))
+            if self.right[node] != NULL:
+                stack.append((self.right[node], depth + 1))
+        return maximum
+
     def storage_bytes(self):
         """Input: none. Output: allocated array bytes including array headers.
 
         Includes spare capacity and recycled slots, but excludes process memory,
-        temporary stacks, the instance, and the treap random-generator object.
+        temporary stacks, instance attributes, and the treap random generator.
         """
         arrays = [self.keys, self.left, self.right, self.parent, self.free]
         if self.meta is not None:

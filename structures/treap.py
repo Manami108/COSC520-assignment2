@@ -1,11 +1,11 @@
-"""Randomized treap ordered set with a BST key order and min-heap priorities."""
+"""Randomized treap with BST key order and min-heap priority order."""
 
 import random
 from .base import NULL, PackedBST
 
 
 class Treap(PackedBST):
-    """Seeded independent priorities give expected O(log n) operations."""
+    """Random priorities give expected O(log n) search, insertion, and deletion."""
 
     def __init__(self, seed=42):
         """Input: random seed. Output: an empty reproducible treap."""
@@ -13,7 +13,7 @@ class Treap(PackedBST):
         self.rng = random.Random(seed)
 
     def _rank(self, node):
-        """Input: node. Output: priority/key pair; keys break priority ties."""
+        """Input: node. Output: (priority, key); keys break rare priority ties."""
         return self.meta[node], self.keys[node]
 
     def insert(self, key):
@@ -45,6 +45,7 @@ class Treap(PackedBST):
         node, _ = self._find(key)
         if node == NULL:
             return False
+        # Rotate the lower-priority child upward until the node has <=1 child.
         while self.left[node] != NULL and self.right[node] != NULL:
             if self._rank(self.left[node]) < self._rank(self.right[node]):
                 self._rotate_right(node)

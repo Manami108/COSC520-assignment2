@@ -14,41 +14,41 @@ class AVLTree(PackedBST):
         """Input: node index. Output: height, using zero for an empty subtree."""
         return 0 if node == NULL else self.meta[node]
 
-    def _update(self, node):
+    def _update_height(self, node):
         """Input: live node. Output: none; recompute height from its children."""
         self.meta[node] = 1 + max(self._height(self.left[node]), self._height(self.right[node]))
 
-    def _balance(self, node):
+    def _balance_factor(self, node):
         """Input: live node. Output: left height minus right height."""
         return self._height(self.left[node]) - self._height(self.right[node])
 
-    def _left(self, node):
+    def _rotate_left_avl(self, node):
         """Input: node. Output: new subtree root after rotation/height repair."""
         root = self._rotate_left(node)
-        self._update(node)
-        self._update(root)
+        self._update_height(node)
+        self._update_height(root)
         return root
 
-    def _right(self, node):
+    def _rotate_right_avl(self, node):
         """Input: node. Output: new subtree root after rotation/height repair."""
         root = self._rotate_right(node)
-        self._update(node)
-        self._update(root)
+        self._update_height(node)
+        self._update_height(root)
         return root
 
     def _rebalance(self, node):
         """Input: ancestor of a change. Output: none; repair up to the root."""
         while node != NULL:
-            self._update(node)
-            balance = self._balance(node)
+            self._update_height(node)
+            balance = self._balance_factor(node)
             if balance > 1:
-                if self._balance(self.left[node]) < 0:
-                    self._left(self.left[node])
-                node = self._right(node)
+                if self._balance_factor(self.left[node]) < 0:
+                    self._rotate_left_avl(self.left[node])
+                node = self._rotate_right_avl(node)
             elif balance < -1:
-                if self._balance(self.right[node]) > 0:
-                    self._right(self.right[node])
-                node = self._left(node)
+                if self._balance_factor(self.right[node]) > 0:
+                    self._rotate_right_avl(self.right[node])
+                node = self._rotate_left_avl(node)
             node = self.parent[node]
 
     def insert(self, key):
