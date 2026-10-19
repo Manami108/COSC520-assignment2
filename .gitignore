@@ -1,9 +1,11 @@
+.DS_Store
+
+data/
+
 # Python virtual environments
 .venv/
 venv/
 env/
-
-.DS_Store
 
 # Python cache files
 __pycache__/

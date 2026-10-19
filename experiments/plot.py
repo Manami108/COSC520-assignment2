@@ -1,87 +1,106 @@
-"""Create PNG/PDF figures; matplotlib is used only for visualization."""
+"""Plot two combined figures from the existing tree benchmark CSV files.
+
+Run from project root: python -m experiments.plot --order all
+AI-assisted draft: review and disclose its use in the assignment.
+"""
 
 import argparse
 import csv
 from pathlib import Path
+from statistics import median
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+from .dataset import ORDERS
+
+RESULTS = Path("results")
+TREES = ("avl", "treap", "scapegoat")
+METRICS = (
+    ("build_s", "Build time", "Seconds"),
+    ("search_us", "Search", "Microseconds / operation"),
+    ("insert_us", "Extra insertion", "Microseconds / operation"),
+    ("delete_us", "Deletion", "Microseconds / operation"),
+    ("height", "Tree height", "Levels"),
+    ("avg_depth", "Average search depth", "Nodes visited"),
+)
 
 
-def plot_results(results):
-    """Input: results directory. Output: figures for each order/workload pair."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
+def load(order):
+    with (RESULTS / f"bench_{order}.csv").open(newline="") as file:
+        return list(csv.DictReader(file))
 
-    results = Path(results)
-    with (results / "summary.csv").open(newline="") as stream:
-        rows = list(csv.DictReader(stream))
-    if not rows:
-        raise ValueError("Summary contains no results")
-    output = results / "plots"
-    output.mkdir(exist_ok=True)
-    colors = {"avl": "#3569b1", "treap": "#d97725", "splay": "#398264"}
-    labels = {"avl": "AVL", "treap": "Treap", "splay": "Splay"}
-    pairs = sorted({(row["order"], row["workload"]) for row in rows})
 
-    def draw(axis, subset, field, ylabel, operation=None, log_y=False):
-        """Input: axis/data/metric. Output: drawn lines and observed min-max band."""
-        for name in ("avl", "treap", "splay"):
-            data = sorted([row for row in subset if row["algorithm"] == name
-                           and (operation is None or row["operation"] == operation)],
-                          key=lambda row: int(row["n"]))
-            if not data:
-                continue
-            x = [int(row["n"]) for row in data]
-            y = [float(row[field]) for row in data]
-            axis.plot(x, y, "o-", color=colors[name], label=labels[name], markersize=4)
-            if field == "median_us":
-                axis.fill_between(x, [float(row["min_us"]) for row in data],
-                                  [float(row["max_us"]) for row in data],
-                                  color=colors[name], alpha=0.14)
-        axis.set_xscale("log")
-        if log_y:
-            axis.set_yscale("log")
-        axis.set_xlabel("Initial distinct keys n (log scale)")
-        axis.set_ylabel(ylabel)
-        axis.grid(alpha=0.22)
-        axis.legend(frameon=False)
+def mid(rows, tree, n, metric):
+    values = [float(r[metric]) for r in rows
+              if r["tree"] == tree and int(r["n"]) == n and r.get(metric)]
+    return median(values) if values else None
 
-    def save(fig, stem):
-        """Input: figure/file stem. Output: PNG and vector PDF files."""
-        fig.savefig(output / f"{stem}.png", dpi=180, bbox_inches="tight")
-        fig.savefig(output / f"{stem}.pdf", bbox_inches="tight")
-        plt.close(fig)
 
-    for order, workload in pairs:
-        subset = [row for row in rows if row["order"] == order and row["workload"] == workload]
-        fig, axes = plt.subplots(2, 2, figsize=(11, 7), constrained_layout=True)
-        for axis, operation in zip(axes.flat, ("build", "search", "insert", "delete")):
-            draw(axis, subset, "median_us", "Median microseconds / operation", operation)
-            axis.set_title({"build": "Build: average insertion cost",
-                            "search": "Membership lookup", "insert": "Insert new keys",
-                            "delete": "Delete original keys"}[operation])
-        fig.suptitle(f"Ordered-set performance | {order} insertion | {workload} search\n"
-                     "Shading: observed min-max across repetitions (not confidence intervals)", fontsize=12)
-        save(fig, f"operations_{order}_{workload}")
-        fig, axis = plt.subplots(figsize=(7, 4.5), constrained_layout=True)
-        draw(axis, subset, "median_seconds", "Total build seconds (log scale)", "build", True)
-        axis.set_title(f"Total construction time | {order} | {workload}")
-        save(fig, f"build_{order}_{workload}")
-        memory = [dict(row, memory_mib=float(row["median_tree_array_bytes"]) / (1 << 20))
-                  for row in subset if row["operation"] == "build"]
-        fig, axis = plt.subplots(figsize=(7, 4.5), constrained_layout=True)
-        draw(axis, memory, "memory_mib", "Tree arrays after build (MiB)")
-        axis.set_title(f"Allocated array storage | {order} | {workload}\n"
-                       "Includes capacity and headers; excludes process/data/workload memory", fontsize=11)
-        save(fig, f"memory_{order}_{workload}")
-    print(f"Saved figures in {output}")
+def save(fig, name):
+    folder = RESULTS / "figures"
+    folder.mkdir(parents=True, exist_ok=True)
+    fig.savefig(folder / f"{name}.png", dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved {folder / (name + '.png')}")
+
+
+def plot(order):
+    """Six metrics merged into one comparison figure."""
+    rows = load(order)
+    sizes = sorted({int(r["n"]) for r in rows})
+    fig, axes = plt.subplots(2, 3, figsize=(12, 7), constrained_layout=True)
+    for ax, (metric, title, ylabel) in zip(axes.flat, METRICS):
+        for tree in TREES:
+            points = [(n, mid(rows, tree, n, metric)) for n in sizes]
+            points = [(n, y) for n, y in points if y is not None]
+            if points:
+                x, y = zip(*points)
+                ax.plot(x, y, label=("AVL" if tree == "avl" else tree.title()))
+        if len(sizes) > 1:
+            ax.set_xscale("log")
+        ax.set(title=title, xlabel="Number of keys", ylabel=ylabel)
+        ax.grid(alpha=0.2)
+    axes[0, 0].legend(fontsize=8)
+    fig.suptitle(f"AVL vs Treap vs Scapegoat — {order} insertion")
+    save(fig, f"summary_{order}")
+
+
+def orders():
+    """Compare insertion orders at their largest common dataset size."""
+    if not all((RESULTS / f"bench_{o}.csv").exists() for o in ORDERS):
+        return
+    data = {o: load(o) for o in ORDERS}
+    common = set.intersection(*({int(r["n"]) for r in rows} for rows in data.values()))
+    if not common:
+        return
+    n = max(common)
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4), constrained_layout=True)
+    for ax, metric, title, ylabel in zip(axes, ("build_s", "height"),
+                                         ("Build time", "Tree height"),
+                                         ("Seconds", "Levels")):
+        for tree in TREES:
+            values = [mid(data[o], tree, n, metric) for o in ORDERS]
+            if all(v is not None for v in values):
+                ax.plot(ORDERS, values, label=("AVL" if tree == "avl" else tree.title()))
+        ax.set(title=title, ylabel=ylabel)
+        ax.grid(alpha=0.2)
+    axes[0].legend(fontsize=8)
+    fig.suptitle(f"Insertion-order comparison (n={n:,})")
+    save(fig, "insertion_order")
 
 
 def main():
-    """Input: CLI results directory. Output: saved comparison figures."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--results", type=Path, default=Path("results/quick"))
+    parser.add_argument("--order", choices=(*ORDERS, "all"), default="random")
     args = parser.parse_args()
-    plot_results(args.results)
+    order = "random" if args.order == "all" else args.order
+    if not (RESULTS / f"bench_{order}.csv").exists():
+        parser.error(f"Missing results/bench_{order}.csv")
+    plot(order)
+    if args.order == "all":
+        orders()
 
 
 if __name__ == "__main__":

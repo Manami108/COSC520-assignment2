@@ -1,13 +1,16 @@
-"""Three manually implemented ordered sets; no third-party tree libraries."""
+"""AVL, Treap, and Scapegoat tree implementations."""
 
 from .avl import AVLTree
 from .treap import Treap
-from .splay import SplayTree
+from .scapegoat import ScapegoatTree
 
-TREE_TYPES = {"avl": AVLTree, "treap": Treap, "splay": SplayTree}
-
+TREE_TYPES = {
+    "avl": AVLTree,
+    "treap": Treap,
+    "scapegoat": ScapegoatTree,
+}
 
 def make_tree(name, seed=42):
-    """Input: name and seed. Output: an empty tree; treaps use the seed."""
+    """Create a tree by name, using a seed for Treap."""
     cls = TREE_TYPES[name]
     return cls(seed=seed) if name == "treap" else cls()
