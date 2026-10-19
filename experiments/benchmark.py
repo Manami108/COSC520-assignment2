@@ -1,6 +1,8 @@
-"""Benchmark insert (build), search, extra insert, and delete for three trees.
+"""Compare AVL, Treap, and Scapegoat on time, height, and search depth.
 
-Run from project root: python -m experiments.benchmark --sizes 10000 100000
+Run from project root:
+    python -m experiments.benchmark --sizes 10000 100000 --order random --repeats 3
+    python -m experiments.benchmark --sizes 10000 --order random --shrink
 AI-assisted draft: review and disclose its use in the assignment.
 """
 
@@ -12,65 +14,102 @@ from pathlib import Path
 from time import perf_counter
 
 from structures import TREE_TYPES, make_tree
-from .dataset import ORDERS, load
+from structures.base import NULL
+from .dataset import ORDERS, make, load
 
 FIELDS = ("tree", "order", "n", "seed", "repeat", "queries", "updates",
-          "build_s", "search_us", "insert_us", "delete_us", "height", "mem_mib")
+          "build_s", "search_us", "insert_us", "delete_us", "height",
+          "mem_mib", "avg_depth", "height_60", "shrink_us")
 
 
-def time_ops(fn, keys):
-    """Input: a tree operation and keys. Output: elapsed seconds."""
-    start = perf_counter()
+def timed(fn, keys):
+    """Return batch execution time in seconds, excluding GC pauses."""
+    enabled = gc.isenabled()
+    gc.disable()
+    try:
+        start = perf_counter()
+        for key in keys:
+            fn(key)
+        return perf_counter() - start
+    finally:
+        if enabled:
+            gc.enable()
+
+
+def depth(tree, keys):
+    """Return mean nodes visited when searching for existing keys."""
+    total = 0
     for key in keys:
-        fn(key)
-    return perf_counter() - start
+        node = tree.root
+        while node != NULL:
+            total += 1
+            if key == tree.keys[node]:
+                break
+            node = tree.left[node] if key < tree.keys[node] else tree.right[node]
+        else:
+            raise AssertionError(f"Missing sampled key: {key}")
+    return total / len(keys)
 
 
-def bench(n, order, seed, queries, updates, rep):
-    """Input: workload settings. Output: one result row per tree."""
+def bench(n, order, seed, queries, updates, rep, shrink):
+    """Produce one benchmark row for each tree using identical operations."""
     keys = load(n, order, seed)
-    rng = random.Random(seed + 1000)
-    # Each lookup is an existing even key or an absent odd key (50/50).
+    rng = random.Random(seed + 1000 + rep)
     lookups = [2 * rng.randrange(n) + (i % 2) for i in range(queries)]
     count = min(updates, n)
     added = [2 * i + 1 for i in rng.sample(range(n), count)]
     removed = added.copy()
     rng.shuffle(removed)
+    probes = [2 * rng.randrange(n) for _ in range(min(1000, n))]
 
     for name in TREE_TYPES:
-        gc.collect()  # Do not include cleanup from the previous tree in timings.
+        gc.collect()
         tree = make_tree(name, seed=seed + rep)
-        build = time_ops(tree.insert, keys)
-        height = tree.height()  # Diagnostics are outside timed operations.
-        memory = tree.storage_bytes() / 1048576
-        search = time_ops(tree.search, lookups)
-        insert = time_ops(tree.insert, added)
-        delete = time_ops(tree.delete, removed)
-        if len(tree) != n:  # A quick integrity check, not a timed validation.
-            raise AssertionError(f"{name}: tree size changed unexpectedly")
-        yield {
-            "tree": name, "order": order, "n": n, "seed": seed,
-            "repeat": rep, "queries": queries, "updates": count,
-            "build_s": round(build, 6),
-            "search_us": round(search * 1e6 / queries, 4),
-            "insert_us": round(insert * 1e6 / count, 4),
-            "delete_us": round(delete * 1e6 / count, 4),
-            "height": height, "mem_mib": round(memory, 3),
-        }
-        del tree
+        build = timed(tree.insert, keys)
+        if len(tree) != n:
+            raise AssertionError(f"{name}: build size mismatch")
+        height = tree.height()
+        avg_depth = depth(tree, probes)
+        memory = tree.storage_bytes() / (1024 * 1024)
+        search = timed(tree.search, lookups)
+        insert = timed(tree.insert, added)
+        delete = timed(tree.delete, removed)
+        if len(tree) != n:
+            raise AssertionError(f"{name}: updates changed final size")
+
+        height_60, shrink_us = "", ""
+        if shrink:
+            cut = n * 60 // 100
+            if cut:
+                seconds = timed(tree.delete, range(0, 2 * cut, 2))
+                if len(tree) != n - cut:
+                    raise AssertionError(f"{name}: shrink size mismatch")
+                height_60 = tree.height()
+                shrink_us = round(seconds * 1e6 / cut, 4)
+
+        yield {"tree": name, "order": order, "n": n, "seed": seed,
+               "repeat": rep, "queries": queries, "updates": count,
+               "build_s": round(build, 6),
+               "search_us": round(search * 1e6 / queries, 4),
+               "insert_us": round(insert * 1e6 / count, 4),
+               "delete_us": round(delete * 1e6 / count, 4),
+               "height": height, "avg_depth": round(avg_depth, 3),
+               "mem_mib": round(memory, 3),
+               "height_60": height_60, "shrink_us": shrink_us}
+
 
 def main():
-    """Input: CLI settings. Output: CSV results and progress in terminal."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sizes", nargs="+", type=int, default=[10000, 100000])
     parser.add_argument("--order", choices=ORDERS, default="random")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--queries", type=int, default=3000)
     parser.add_argument("--updates", type=int, default=1000)
-    parser.add_argument("--repeats", type=int, default=1)
+    parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument("--shrink", action="store_true", help="Also delete 60%% of original keys")
     args = parser.parse_args()
     if any(n < 1 for n in args.sizes) or min(args.queries, args.updates, args.repeats) < 1:
-        parser.error("sizes, queries, updates, and repeats must all be positive")
+        parser.error("sizes, queries, updates and repeats must be positive")
 
     Path("results").mkdir(exist_ok=True)
     dest = Path("results") / f"bench_{args.order}.csv"
@@ -78,14 +117,16 @@ def main():
         writer = csv.DictWriter(f, fieldnames=FIELDS)
         writer.writeheader()
         for n in args.sizes:
-            print(f"Benchmarking n={n:,} ({args.order}) ...", flush=True)
+            make(n, args.order, args.seed)
+            print(f"Benchmark n={n:,}, order={args.order}", flush=True)
             for rep in range(args.repeats):
-                for row in bench(n, args.order, args.seed, args.queries, args.updates, rep):
+                for row in bench(n, args.order, args.seed, args.queries,
+                                 args.updates, rep, args.shrink):
                     writer.writerow(row)
-                    f.flush()
-                    print(f"  {row['tree']:9s} build={row['build_s']:8.3f}s "
-                          f"search={row['search_us']:8.2f} us/op", flush=True)
+                    print(f"  {row['tree']}: {row['build_s']:.4f}s, "
+                          f"height={row['height']}, depth={row['avg_depth']:.2f}")
     print(f"Saved {dest}")
+
 
 if __name__ == "__main__":
     main()
