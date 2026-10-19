@@ -72,7 +72,3 @@ Use `--order ascending` or `--order descending` for other insertion orders in bo
 - Metrics: build time, search time, insertion time, deletion time, tree height, and array storage
 
 Results are saved as CSV files and PNG figures in `results/`.
-
-## AI Usage
-
-AI tools assisted with code development, debugging, and documentation. All implementations and experimental results should be independently reviewed and verified before submission.
