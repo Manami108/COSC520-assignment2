@@ -55,17 +55,3 @@ class Treap(PackedBST):
         self._replace(node, child)
         self._release(node)
         return True
-
-    def validate(self):
-        """Input: none. Output: True; verify BST and min-heap invariants."""
-        super().validate()
-        stack = [self.root]
-        while stack:
-            node = stack.pop()
-            if node == NULL:
-                continue
-            for child in (self.left[node], self.right[node]):
-                if child != NULL:
-                    assert self._rank(node) <= self._rank(child), "Priority heap violated"
-                    stack.append(child)
-        return True

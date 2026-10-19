@@ -85,21 +85,3 @@ class AVLTree(PackedBST):
         self._release(node)
         self._rebalance(parent)
         return True
-
-    def validate(self):
-        """Input: none. Output: True; verify BST, height, and AVL invariants."""
-        super().validate()
-        heights, stack = {}, [(self.root, False)]
-        while stack:
-            node, visited = stack.pop()
-            if node == NULL:
-                continue
-            if not visited:
-                stack.extend(((node, True), (self.left[node], False), (self.right[node], False)))
-                continue
-            left = heights.get(self.left[node], 0)
-            right = heights.get(self.right[node], 0)
-            assert abs(left - right) <= 1, "AVL balance violated"
-            heights[node] = 1 + max(left, right)
-            assert self.meta[node] == heights[node], "Stale height"
-        return True

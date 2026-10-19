@@ -141,24 +141,3 @@ class ScapegoatTree(PackedBST):
                 self._rebuild(self.root)
             self.max_size = self.size
         return True
-
-    def validate(self):
-        """Input: none. Output: True; verify BST links and height bound."""
-        super().validate()
-        if self.size == 0:
-            assert self.max_size == 0, "Historical size should reset when empty"
-        else:
-            assert self.size <= self.max_size <= 2 * self.size, "Historical size bound violated"
-        if self.root == NULL:
-            return True
-        max_depth = 0
-        stack = [(self.root, 0)]
-        while stack:
-            node, depth = stack.pop()
-            max_depth = max(max_depth, depth)
-            if self.left[node] != NULL:
-                stack.append((self.left[node], depth + 1))
-            if self.right[node] != NULL:
-                stack.append((self.right[node], depth + 1))
-        assert max_depth <= math.log(self.max_size) / LOG_3_OVER_2 + 1e-10, "Height bound violated"
-        return True

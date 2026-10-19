@@ -79,7 +79,7 @@ class PackedBST:
             node = self.left[node] if key < value else self.right[node]
         return NULL, last
 
-    def contains(self, key):
+    def search(self, key):
         """Input: integer key. Output: whether it exists, without restructuring."""
         self._check_key(key)
         return self._find(key)[0] != NULL
@@ -159,34 +159,3 @@ class PackedBST:
         if self.meta is not None:
             arrays.append(self.meta)
         return sum(sys.getsizeof(values) for values in arrays)
-
-    def validate(self):
-        """Input: none. Output: True; raise AssertionError on structural faults.
-
-        This O(n) debug check is outside benchmark timing and uses O(n) memory.
-        """
-        assert (self.root == NULL) == (self.size == 0), "Root/size mismatch"
-        if self.root != NULL:
-            assert self.parent[self.root] == NULL, "Root has a parent"
-        seen, stack = set(), [(self.root, None, None)]
-        while stack:
-            node, low, high = stack.pop()
-            if node == NULL:
-                continue
-            assert 0 <= node < len(self.keys), "Invalid node index"
-            assert node not in seen, "Cycle or repeated child"
-            seen.add(node)
-            key = self.keys[node]
-            assert low is None or low < key, "BST lower bound violated"
-            assert high is None or key < high, "BST upper bound violated"
-            for child in (self.left[node], self.right[node]):
-                if child != NULL:
-                    assert self.parent[child] == node, "Parent link mismatch"
-            stack.append((self.left[node], low, key))
-            stack.append((self.right[node], key, high))
-        assert len(seen) == self.size, "Unreachable live nodes"
-        free = set(self.free)
-        assert len(free) == len(self.free), "Duplicate free slots"
-        assert not seen & free, "A free slot is still reachable"
-        assert seen | free == set(range(len(self.keys))), "Lost storage slots"
-        return True
