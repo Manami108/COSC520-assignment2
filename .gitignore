@@ -1,5 +1,7 @@
 .DS_Store
 
+data/
+
 # Python virtual environments
 .venv/
 venv/
