@@ -1,4 +1,4 @@
-"""Plot two combined figures from the existing tree benchmark CSV files.
+"""Plot two combined figures from benchmark CSVs.
 
 Run from project root: python -m experiments.plot --order all
 AI-assisted draft: review and disclose its use in the assignment.
@@ -32,29 +32,30 @@ def load(order):
         return list(csv.DictReader(file))
 
 
-def mid(rows, tree, n, metric):
-    values = [float(r[metric]) for r in rows
-              if r["tree"] == tree and int(r["n"]) == n and r.get(metric)]
-    return median(values) if values else None
+def vals(rows, tree, n, metric):
+    """Return all repetitions for one tree, size, and metric."""
+    return [float(r[metric]) for r in rows
+            if r["tree"] == tree and int(r["n"]) == n and r.get(metric)]
 
 
 def save(fig, name):
     folder = RESULTS / "figures"
     folder.mkdir(parents=True, exist_ok=True)
-    fig.savefig(folder / f"{name}.png", dpi=200, bbox_inches="tight")
+    dest = folder / f"{name}.png"
+    fig.savefig(dest, dpi=200, bbox_inches="tight")
     plt.close(fig)
-    print(f"Saved {folder / (name + '.png')}")
+    print(f"Saved {dest}")
 
 
 def plot(order):
-    """Six metrics merged into one comparison figure."""
+    """Plot six performance and structure metrics in one figure."""
     rows = load(order)
     sizes = sorted({int(r["n"]) for r in rows})
     fig, axes = plt.subplots(2, 3, figsize=(12, 7), constrained_layout=True)
     for ax, (metric, title, ylabel) in zip(axes.flat, METRICS):
         for tree in TREES:
-            points = [(n, mid(rows, tree, n, metric)) for n in sizes]
-            points = [(n, y) for n, y in points if y is not None]
+            points = [(n, median(v)) for n in sizes
+                      if (v := vals(rows, tree, n, metric))]
             if points:
                 x, y = zip(*points)
                 ax.plot(x, y, label=("AVL" if tree == "avl" else tree.title()))
@@ -68,27 +69,54 @@ def plot(order):
 
 
 def orders():
-    """Compare insertion orders at their largest common dataset size."""
-    if not all((RESULTS / f"bench_{o}.csv").exists() for o in ORDERS):
+    """Grouped bars with min–max ranges across benchmark repetitions."""
+    missing = [o for o in ORDERS if not (RESULTS / f"bench_{o}.csv").exists()]
+    if missing:
+        print(f"Skipping order comparison; missing CSVs for: {', '.join(missing)}")
         return
-    data = {o: load(o) for o in ORDERS}
+    data = {order: load(order) for order in ORDERS}
     common = set.intersection(*({int(r["n"]) for r in rows} for rows in data.values()))
     if not common:
+        print("Skipping order comparison; no dataset size appears in every CSV")
         return
     n = max(common)
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4), constrained_layout=True)
-    for ax, metric, title, ylabel in zip(axes, ("build_s", "height"),
-                                         ("Build time", "Tree height"),
-                                         ("Seconds", "Levels")):
-        for tree in TREES:
-            values = [mid(data[o], tree, n, metric) for o in ORDERS]
-            if all(v is not None for v in values):
-                ax.plot(ORDERS, values, label=("AVL" if tree == "avl" else tree.title()))
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5), constrained_layout=True)
+    width = 0.25
+
+    for ax, metric, title, ylabel in zip(
+            axes, ("build_s", "height"), ("Build time", "Tree height"),
+            ("Seconds", "Levels")):
+        for i, tree in enumerate(TREES):
+            xs, mids, low, high = [], [], [], []
+            for j, order in enumerate(ORDERS):
+                samples = vals(data[order], tree, n, metric)
+                if not samples:
+                    continue
+                m = median(samples)
+                xs.append(j + (i - 1) * width)
+                mids.append(m)
+                low.append(m - min(samples))
+                high.append(max(samples) - m)
+            if xs:
+                ax.bar(xs, mids, width=width,
+                       yerr=[low, high], capsize=3,
+                       label=("AVL" if tree == "avl" else tree.title()))
+        ax.set_xticks(range(len(ORDERS)), ORDERS)
         ax.set(title=title, ylabel=ylabel)
-        ax.grid(alpha=0.2)
+        ax.grid(axis="y", alpha=0.2)
+        ax.set_axisbelow(True)
     axes[0].legend(fontsize=8)
-    fig.suptitle(f"Insertion-order comparison (n={n:,})")
+    fig.suptitle(f"Insertion-order comparison (n={n:,}; bars = medians, whiskers = min–max)")
     save(fig, "insertion_order")
+
+    print(f"\nBuild-time variation at n={n:,} (seconds):")
+    print(f"{'Order':<12} {'Tree':<12} {'Reps':>4} {'Min':>8} {'Median':>8} {'Max':>8}")
+    for order in ORDERS:
+        for tree in TREES:
+            samples = vals(data[order], tree, n, "build_s")
+            if samples:
+                print(f"{order:<12} {tree:<12} {len(samples):>4} "
+                      f"{min(samples):>8.3f} {median(samples):>8.3f} {max(samples):>8.3f}")
 
 
 def main():

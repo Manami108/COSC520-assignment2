@@ -1,30 +1,31 @@
-"""Compare AVL, Treap, and Scapegoat on time, height, and search depth.
+"""Benchmark AVL, Treap, and Scapegoat trees.
 
-Run from project root:
-    python -m experiments.benchmark --sizes 10000 100000 --order random --repeats 3
-    python -m experiments.benchmark --sizes 10000 --order random --shrink
-AI-assisted draft: review and disclose its use in the assignment.
+Run from the project root, for example:
+    python -m experiments.benchmark --sizes 10000 100000 --order random --repeats 3 --shrink --tag pilot
+AI-assisted revision: review and disclose its use in the assignment report.
 """
 
 import argparse
 import csv
 import gc
-import random
 from pathlib import Path
+import random
 from time import perf_counter
 
 from structures import TREE_TYPES, make_tree
 from structures.base import NULL
 from .dataset import ORDERS, make, load
 
-FIELDS = ("tree", "order", "n", "seed", "repeat", "queries", "updates",
-          "build_s", "search_us", "insert_us", "delete_us", "height",
-          "mem_mib", "avg_depth", "height_60", "shrink_us")
+FIELDS = (
+    "tree", "order", "n", "seed", "repeat", "queries_per_type", "updates",
+    "build_s", "search_hit_us", "search_miss_us", "insert_us", "delete_us",
+    "height", "mem_mib", "avg_depth", "shrink_deleted", "height_60", "shrink_us",
+)
 
 
 def timed(fn, keys):
-    """Return batch execution time in seconds, excluding GC pauses."""
-    enabled = gc.isenabled()
+    """Return the time in seconds to apply fn to every key."""
+    was_enabled = gc.isenabled()
     gc.disable()
     try:
         start = perf_counter()
@@ -32,30 +33,31 @@ def timed(fn, keys):
             fn(key)
         return perf_counter() - start
     finally:
-        if enabled:
+        if was_enabled:
             gc.enable()
 
 
 def depth(tree, keys):
-    """Return mean nodes visited when searching for existing keys."""
+    """Return the average search depth for keys known to exist."""
     total = 0
     for key in keys:
         node = tree.root
         while node != NULL:
             total += 1
-            if key == tree.keys[node]:
+            if tree.keys[node] == key:
                 break
             node = tree.left[node] if key < tree.keys[node] else tree.right[node]
-        else:
-            raise AssertionError(f"Missing sampled key: {key}")
     return total / len(keys)
 
 
 def bench(n, order, seed, queries, updates, rep, shrink):
-    """Produce one benchmark row for each tree using identical operations."""
+    """Measure each tree using the same keys and operations."""
     keys = load(n, order, seed)
-    rng = random.Random(seed + 1000 + rep)
-    lookups = [2 * rng.randrange(n) + (i % 2) for i in range(queries)]
+    rng = random.Random(seed + rep)
+
+    # Original keys are even; odd numbers are absent until insertion.
+    hits = [2 * rng.randrange(n) for _ in range(queries)]
+    misses = [2 * rng.randrange(n) + 1 for _ in range(queries)]
     count = min(updates, n)
     added = [2 * i + 1 for i in rng.sample(range(n), count)]
     removed = added.copy()
@@ -65,37 +67,50 @@ def bench(n, order, seed, queries, updates, rep, shrink):
     for name in TREE_TYPES:
         gc.collect()
         tree = make_tree(name, seed=seed + rep)
+
         build = timed(tree.insert, keys)
-        if len(tree) != n:
-            raise AssertionError(f"{name}: build size mismatch")
+        assert len(tree) == n
         height = tree.height()
         avg_depth = depth(tree, probes)
         memory = tree.storage_bytes() / (1024 * 1024)
-        search = timed(tree.search, lookups)
+
+        hit_s = timed(tree.search, hits)
+        miss_s = timed(tree.search, misses)
         insert = timed(tree.insert, added)
         delete = timed(tree.delete, removed)
-        if len(tree) != n:
-            raise AssertionError(f"{name}: updates changed final size")
+        assert len(tree) == n
 
-        height_60, shrink_us = "", ""
+        cut, height_60, shrink_us = 0, "", ""
         if shrink:
             cut = n * 60 // 100
             if cut:
-                seconds = timed(tree.delete, range(0, 2 * cut, 2))
-                if len(tree) != n - cut:
-                    raise AssertionError(f"{name}: shrink size mismatch")
+                # Spread selected keys across the whole original key range.
+                # This generator avoids creating another large list.
+                bulk_keys = (2 * (i * n // cut) for i in range(cut))
+                seconds = timed(tree.delete, bulk_keys)
+                assert len(tree) == n - cut
                 height_60 = tree.height()
                 shrink_us = round(seconds * 1e6 / cut, 4)
 
-        yield {"tree": name, "order": order, "n": n, "seed": seed,
-               "repeat": rep, "queries": queries, "updates": count,
-               "build_s": round(build, 6),
-               "search_us": round(search * 1e6 / queries, 4),
-               "insert_us": round(insert * 1e6 / count, 4),
-               "delete_us": round(delete * 1e6 / count, 4),
-               "height": height, "avg_depth": round(avg_depth, 3),
-               "mem_mib": round(memory, 3),
-               "height_60": height_60, "shrink_us": shrink_us}
+        yield {
+            "tree": name, "order": order, "n": n, "seed": seed,
+            "repeat": rep, "queries_per_type": queries, "updates": count,
+            "build_s": round(build, 6),
+            "search_hit_us": round(hit_s * 1e6 / queries, 4),
+            "search_miss_us": round(miss_s * 1e6 / queries, 4),
+            "insert_us": round(insert * 1e6 / count, 4),
+            "delete_us": round(delete * 1e6 / count, 4),
+            "height": height, "avg_depth": round(avg_depth, 3),
+            "mem_mib": round(memory, 3),
+            "shrink_deleted": cut, "height_60": height_60,
+            "shrink_us": shrink_us,
+        }
+
+
+def result_path(order, tag=""):
+    """Return the output CSV path, optionally labeled by experiment."""
+    suffix = f"_{tag}" if tag else ""
+    return Path("results") / f"bench_{order}{suffix}.csv"
 
 
 def main():
@@ -106,25 +121,29 @@ def main():
     parser.add_argument("--queries", type=int, default=3000)
     parser.add_argument("--updates", type=int, default=1000)
     parser.add_argument("--repeats", type=int, default=3)
-    parser.add_argument("--shrink", action="store_true", help="Also delete 60%% of original keys")
+    parser.add_argument("--shrink", action="store_true")
+    parser.add_argument("--tag", default="")
     args = parser.parse_args()
+
+    # These quantities are used as divisors in per-operation timings.
     if any(n < 1 for n in args.sizes) or min(args.queries, args.updates, args.repeats) < 1:
         parser.error("sizes, queries, updates and repeats must be positive")
 
-    Path("results").mkdir(exist_ok=True)
-    dest = Path("results") / f"bench_{args.order}.csv"
+    dest = result_path(args.order, args.tag)
+    dest.parent.mkdir(parents=True, exist_ok=True)
     with dest.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDS)
         writer.writeheader()
         for n in args.sizes:
             make(n, args.order, args.seed)
-            print(f"Benchmark n={n:,}, order={args.order}", flush=True)
             for rep in range(args.repeats):
                 for row in bench(n, args.order, args.seed, args.queries,
                                  args.updates, rep, args.shrink):
                     writer.writerow(row)
-                    print(f"  {row['tree']}: {row['build_s']:.4f}s, "
-                          f"height={row['height']}, depth={row['avg_depth']:.2f}")
+                    print(f"n={n:,}, repeat={rep + 1}, {row['tree']}: "
+                          f"build={row['build_s']:.3f}s, height={row['height']}",
+                          flush=True)
+                f.flush()
     print(f"Saved {dest}")
 
 
