@@ -97,7 +97,7 @@ The following sizes and settings are fixed in the Python files and do not need c
 In `experiments/dataset.py`:
 
 ```python
-SIZES = (100, 1_000, 100_000, 1_000_000, 10_000_000)
+SIZES = (100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000)
 SEED = 42
 ```
 
