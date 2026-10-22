@@ -138,15 +138,3 @@ The `--tag` option identifies each experiment. For example, `--tag pilot` genera
 
 **Note:** Running a benchmark again with the same insertion order and tag will overwrite its existing CSV file.
 
-## Submission
-
-The final PDF report should include:
-
-- Explanation and applications of AVL, Treap, and Scapegoat trees
-- Theoretical time and space complexity analysis
-- Performance tables and plots
-- Discussion of the experimental results
-- GitHub repository link
-- Dataset link
-- References and any required AI-use disclosure
-
