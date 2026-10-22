@@ -1,13 +1,11 @@
-"""Create line plots and a summary CSV for the tree benchmarks.
+"""Create three scaling plots and two comparison tables from benchmark results.
 
 From the project root:
-    python3 -m experiments.plot                    # every available order
-    python3 -m experiments.plot --order random
+    python3 -m experiments.plot
 
-AI-assisted revision: review and disclose its use as required by your course.
+AI-assisted revision: review and disclose its use as required by the course.
 """
 
-import argparse
 import csv
 from math import log2
 from pathlib import Path
@@ -15,146 +13,159 @@ from statistics import median
 
 import matplotlib.pyplot as plt
 
-from .benchmark import result_path
-from .dataset import ORDERS
+from .benchmark import RESULT_FILE, REPEATS
+from .dataset import DELETION_SIZE, ORDERS, ORDER_SIZE, SCALING_SIZES
 
 RESULTS = Path("results")
 TREES = ("avl", "treap", "scapegoat")
-COLORS = {"avl": "red", "treap": "blue", "scapegoat": "green"}
 NAMES = {"avl": "AVL", "treap": "Treap", "scapegoat": "Scapegoat"}
-
-TIME_METRICS = (
-    ("build_s", "Build time", "Seconds"),
-    ("search_hit_us", "Successful search", "Microseconds / operation"),
-    ("search_miss_us", "Unsuccessful search", "Microseconds / operation"),
-    ("insert_us", "Insertion", "Microseconds / operation"),
-    ("delete_us", "Deletion", "Microseconds / operation"),
-    ("shrink_us", "60% bulk deletion", "Microseconds / operation"),
-)
-STRUCTURE_METRICS = (
-    ("height", "Tree height", "Levels (as reported by tree.height())"),
-    ("avg_depth", "Average successful search depth", "Nodes visited"),
-    ("mem_mib", "Array storage", "MiB (tree.storage_bytes())"),
-)
-SUMMARY_METRICS = (
-    "build_s", "search_hit_us", "search_miss_us", "insert_us", "delete_us",
-    "shrink_us", "height", "avg_depth", "mem_mib", "height_60",
-)
+COLORS = {"avl": "red", "treap": "blue", "scapegoat": "green"}
 
 
-def read_rows(order):
-    with result_path(order).open(newline="") as f:
+def read_rows():
+    """Read raw measurements and cast numeric fields for aggregation."""
+    with RESULT_FILE.open(newline="") as f:
         return list(csv.DictReader(f))
 
 
-def median_rows(rows, order):
-    """One row per tree and dataset size (median across repetitions)."""
+def summaries(rows):
+    """Return median metrics for each tree, insertion order, and size."""
     groups = {}
     for row in rows:
-        groups.setdefault((row["tree"], int(row["n"])), []).append(row)
+        key = (row["tree"], row["order"], int(row["n"]))
+        groups.setdefault(key, []).append(row)
 
-    summaries = []
-    for (tree, n), group in sorted(groups.items(), key=lambda item: (item[0][1], item[0][0])):
-        summary = {"order": order, "tree": tree, "n": n, "repeats": len(group)}
-        for metric in SUMMARY_METRICS:
-            readings = [float(r[metric]) for r in group if r.get(metric, "") != ""]
-            summary[metric] = median(readings) if readings else ""
-        summaries.append(summary)
-    return summaries
+    results = {}
+    for key, group in groups.items():
+        result = {"repeats": len(group)}
+        for field in ("build_s", "search_hit_us", "height", "deleted",
+                      "bulk_delete_us", "height_after_delete"):
+            values = [float(r[field]) for r in group if r.get(field, "") != ""]
+            result[field] = median(values) if values else ""
+        results[key] = result
+    return results
 
 
-def save(fig, name):
-    folder = RESULTS / "figures"
+def write_table(name, columns, rows):
+    """Write a concise report-ready CSV table."""
+    folder = RESULTS / "tables"
     folder.mkdir(parents=True, exist_ok=True)
-    dest = folder / f"{name}.png"
-    fig.savefig(dest, dpi=200, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Saved {dest}")
-
-
-def short_n(n):
-    if n >= 1_000_000:
-        return f"{n / 1_000_000:g}M"
-    if n >= 1_000:
-        return f"{n / 1_000:g}k"
-    return str(n)
-
-
-def plot_metrics(rows, metrics, order, category, shape):
-    """Compare three tree types as dataset size increases."""
-    sizes = sorted({r["n"] for r in rows})
-    fig, axes = plt.subplots(*shape,
-                             figsize=(14, 8 if shape[0] == 2 else 4.5),
-                             squeeze=False, constrained_layout=True)
-
-    for ax, (metric, title, unit) in zip(axes.flat, metrics):
-        for tree in TREES:
-            points = [(r["n"], r[metric]) for r in rows
-                      if r["tree"] == tree and r[metric] != ""]
-            if points:
-                x, y = zip(*points)
-                ax.plot(x, y, color=COLORS[tree], marker="o", linewidth=1.8,
-                        label=NAMES[tree])
-
-        if metric == "height":
-            # A reference growth curve, not another measured tree.
-            ax.plot(sizes, [log2(n + 1) for n in sizes],
-                    linestyle="--", color="gray", linewidth=1.2,
-                    label="log₂(n+1) guide")
-        if len(sizes) > 1:
-            ax.set_xscale("log")
-        if metric in ("build_s", "mem_mib") and all(
-                r[metric] > 0 for r in rows if r[metric] != ""):
-            ax.set_yscale("log")
-        ax.set_xticks(sizes, [short_n(n) for n in sizes], fontsize=8)
-        ax.set(title=title, xlabel="Number of keys (n)", ylabel=unit)
-        ax.grid(alpha=0.23, which="both")
-        if metric == "height":
-            ax.legend(fontsize=8)
-
-    # The other panels all use the same three-color key.
-    axes.flat[0].legend(fontsize=8)
-    fig.suptitle(f"AVL vs Treap vs Scapegoat — {category} ({order} insertion)")
-    save(fig, f"{category}_{order}")
-
-
-def save_summary(rows):
-    """CSV table, including all selected insertion orders and sizes."""
-    RESULTS.mkdir(parents=True, exist_ok=True)
-    dest = RESULTS / "summary.csv"
-    fieldnames = ("order", "tree", "n", "repeats", *SUMMARY_METRICS)
+    dest = folder / name
     with dest.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=columns)
         writer.writeheader()
         writer.writerows(rows)
     print(f"Saved {dest}")
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--order", choices=(*ORDERS, "all"), default="all")
-    args = parser.parse_args()
+def size_label(n):
+    """Format an x-axis dataset size using K/M units."""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:g}M"
+    if n >= 1_000:
+        return f"{n / 1_000:g}K"
+    return str(n)
 
-    selected = ORDERS if args.order == "all" else (args.order,)
-    available = [order for order in selected if result_path(order).exists()]
-    if not available:
-        parser.error("No results found. Run python3 -m experiments.benchmark first.")
 
-    all_summaries = []
-    for order in available:
-        rows = median_rows(read_rows(order), order)
-        if not rows:
-            print(f"Skipping empty benchmark file for {order}")
+def plot_scaling(stats):
+    """One line plot each for build time, successful search, and tree height."""
+    plots = (
+        ("build_s", "build_time.png", "Build time", "Seconds"),
+        ("search_hit_us", "search_time.png", "Successful search", "Microseconds per search"),
+        ("height", "tree_height.png", "Tree height", "Levels reported by tree.height()"),
+    )
+    folder = RESULTS / "figures"
+    folder.mkdir(parents=True, exist_ok=True)
+
+    for field, filename, title, unit in plots:
+        fig, ax = plt.subplots(figsize=(6.3, 4.1), constrained_layout=True)
+        found = False
+        for tree in TREES:
+            points = [(n, stats[(tree, "random", n)][field])
+                      for n in SCALING_SIZES
+                      if (tree, "random", n) in stats
+                      and stats[(tree, "random", n)][field] != ""]
+            if not points:
+                continue
+            found = True
+            ax.plot([n for n, value in points], [value for n, value in points],
+                     linewidth=1.8, color=COLORS[tree], label=NAMES[tree])
+
+        if not found:
+            plt.close(fig)
             continue
-        all_summaries.extend(rows)
-        plot_metrics(rows, TIME_METRICS, order, "times", (2, 3))
-        plot_metrics(rows, STRUCTURE_METRICS, order, "structure", (1, 3))
+        if field == "height":
+            sizes = [n for n in SCALING_SIZES
+                     if any((tree, "random", n) in stats for tree in TREES)]
+            ax.plot(sizes, [log2(n + 1) for n in sizes], "--", color="gray",
+                    linewidth=1.3, label="log₂(n+1) reference")
+        ax.set_xscale("log")
+        if field == "build_s":
+            ax.set_yscale("log")
+        ax.set_xticks(SCALING_SIZES, [size_label(n) for n in SCALING_SIZES])
+        ax.set(title=title, xlabel="Number of keys (n)", ylabel=unit)
+        ax.grid(alpha=0.25, which="both")
+        ax.legend(fontsize=9)
+        dest = folder / filename
+        fig.savefig(dest, dpi=220, bbox_inches="tight")
+        plt.close(fig)
+        print(f"Saved {dest}")
 
-    if all_summaries:
-        save_summary(all_summaries)
-    missing = set(selected) - set(available)
-    if missing:
-        print("Missing orders (run the benchmark first): " + ", ".join(sorted(missing)))
+
+def save_tables(stats):
+    """Save the scaling measurements and the two fixed-size comparisons."""
+    scaling = []
+    for n in SCALING_SIZES:
+        for tree in TREES:
+            values = stats.get((tree, "random", n))
+            if values:
+                scaling.append({"n": n, "tree": NAMES[tree],
+                                "build_s": values["build_s"],
+                                "search_hit_us": values["search_hit_us"],
+                                "height": values["height"],
+                                "repeats": values["repeats"]})
+    if scaling:
+        write_table("scalability.csv",
+                    ("n", "tree", "build_s", "search_hit_us", "height", "repeats"),
+                    scaling)
+
+    by_order = []
+    for order in ORDERS:
+        for tree in TREES:
+            values = stats.get((tree, order, ORDER_SIZE))
+            if values:
+                by_order.append({"n": ORDER_SIZE, "order": order,
+                                 "tree": NAMES[tree], "build_s": values["build_s"],
+                                 "height": values["height"],
+                                 "repeats": values["repeats"]})
+    if by_order:
+        write_table("insertion_order.csv",
+                    ("n", "order", "tree", "build_s", "height", "repeats"),
+                    by_order)
+
+    deletion = []
+    for tree in TREES:
+        values = stats.get((tree, "random", DELETION_SIZE))
+        if values and values["bulk_delete_us"] != "":
+            deletion.append({"n": DELETION_SIZE, "tree": NAMES[tree],
+                             "deleted": values["deleted"],
+                             "deletion_us": values["bulk_delete_us"],
+                             "height_before": values["height"],
+                             "height_after": values["height_after_delete"],
+                             "repeats": values["repeats"]})
+    if deletion:
+        write_table("bulk_deletion.csv",
+                    ("n", "tree", "deleted", "deletion_us", "height_before",
+                     "height_after", "repeats"), deletion)
+
+
+def main():
+    if not RESULT_FILE.exists():
+        raise SystemExit("No benchmark results yet. Run: python3 -m experiments.benchmark")
+    stats = summaries(read_rows())
+    plot_scaling(stats)
+    save_tables(stats)
+    print("Each value is a median across the repetitions present in benchmarks.csv.")
 
 
 if __name__ == "__main__":
