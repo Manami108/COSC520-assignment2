@@ -1,8 +1,11 @@
-"""Benchmark AVL, Treap, and Scapegoat trees.
+"""Benchmark AVL, Treap, and Scapegoat trees with fixed settings.
 
-Run from the project root, for example:
-    python -m experiments.benchmark --sizes 10000 100000 --order random --repeats 3 --shrink --tag pilot
-AI-assisted revision: review and disclose its use in the assignment report.
+From the project root:
+    python3 -m experiments.benchmark                  # random
+    python3 -m experiments.benchmark --order ascending
+    python3 -m experiments.benchmark --order all
+
+AI-assisted revision: review and disclose its use as required by your course.
 """
 
 import argparse
@@ -14,7 +17,13 @@ from time import perf_counter
 
 from structures import TREE_TYPES, make_tree
 from structures.base import NULL
-from .dataset import ORDERS, make, load
+from .dataset import ORDERS, SEED, SIZES, make, load
+
+# All benchmark settings are fixed here; only --order is selectable.
+REPEATS = 3
+QUERIES = 3_000           # successful and unsuccessful searches, each
+UPDATES = 1_000           # temporary inserts and deletes; capped at n
+SHRINK = True             # also delete 60% of the original keys
 
 FIELDS = (
     "tree", "order", "n", "seed", "repeat", "queries_per_type", "updates",
@@ -24,7 +33,7 @@ FIELDS = (
 
 
 def timed(fn, keys):
-    """Return the time in seconds to apply fn to every key."""
+    """Time applying fn to every key; return seconds."""
     was_enabled = gc.isenabled()
     gc.disable()
     try:
@@ -38,7 +47,7 @@ def timed(fn, keys):
 
 
 def depth(tree, keys):
-    """Return the average search depth for keys known to exist."""
+    """Average nodes visited to find keys that exist."""
     total = 0
     for key in keys:
         node = tree.root
@@ -50,19 +59,20 @@ def depth(tree, keys):
     return total / len(keys)
 
 
-def bench(n, order, seed, queries, updates, rep, shrink):
-    """Measure each tree using the same keys and operations."""
+def bench(n, order, seed=SEED, queries=QUERIES, updates=UPDATES,
+          rep=0, shrink=SHRINK):
+    """Yield one measurement per tree under identical keys and operations."""
     keys = load(n, order, seed)
     rng = random.Random(seed + rep)
 
-    # Original keys are even; odd numbers are absent until insertion.
+    # The stored keys are even, so odd keys are initially absent.
     hits = [2 * rng.randrange(n) for _ in range(queries)]
     misses = [2 * rng.randrange(n) + 1 for _ in range(queries)]
     count = min(updates, n)
     added = [2 * i + 1 for i in rng.sample(range(n), count)]
     removed = added.copy()
     rng.shuffle(removed)
-    probes = [2 * rng.randrange(n) for _ in range(min(1000, n))]
+    probes = [2 * rng.randrange(n) for _ in range(min(1_000, n))]
 
     for name in TREE_TYPES:
         gc.collect()
@@ -84,8 +94,7 @@ def bench(n, order, seed, queries, updates, rep, shrink):
         if shrink:
             cut = n * 60 // 100
             if cut:
-                # Spread selected keys across the whole original key range.
-                # This generator avoids creating another large list.
+                # Spread deletions across the full original key range.
                 bulk_keys = (2 * (i * n // cut) for i in range(cut))
                 seconds = timed(tree.delete, bulk_keys)
                 assert len(tree) == n - cut
@@ -101,50 +110,39 @@ def bench(n, order, seed, queries, updates, rep, shrink):
             "insert_us": round(insert * 1e6 / count, 4),
             "delete_us": round(delete * 1e6 / count, 4),
             "height": height, "avg_depth": round(avg_depth, 3),
-            "mem_mib": round(memory, 3),
-            "shrink_deleted": cut, "height_60": height_60,
-            "shrink_us": shrink_us,
+            "mem_mib": round(memory, 3), "shrink_deleted": cut,
+            "height_60": height_60, "shrink_us": shrink_us,
         }
+        del tree
 
 
-def result_path(order, tag=""):
-    """Return the output CSV path, optionally labeled by experiment."""
-    suffix = f"_{tag}" if tag else ""
-    return Path("results") / f"bench_{order}{suffix}.csv"
+def result_path(order):
+    """Use one CSV per insertion order; there is no experiment tag."""
+    return Path("results") / f"bench_{order}.csv"
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--sizes", nargs="+", type=int, default=[10000, 100000])
-    parser.add_argument("--order", choices=ORDERS, default="random")
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--queries", type=int, default=3000)
-    parser.add_argument("--updates", type=int, default=1000)
-    parser.add_argument("--repeats", type=int, default=3)
-    parser.add_argument("--shrink", action="store_true")
-    parser.add_argument("--tag", default="")
+    parser.add_argument("--order", choices=(*ORDERS, "all"), default="random")
     args = parser.parse_args()
 
-    # These quantities are used as divisors in per-operation timings.
-    if any(n < 1 for n in args.sizes) or min(args.queries, args.updates, args.repeats) < 1:
-        parser.error("sizes, queries, updates and repeats must be positive")
-
-    dest = result_path(args.order, args.tag)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    with dest.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDS)
-        writer.writeheader()
-        for n in args.sizes:
-            make(n, args.order, args.seed)
-            for rep in range(args.repeats):
-                for row in bench(n, args.order, args.seed, args.queries,
-                                 args.updates, rep, args.shrink):
-                    writer.writerow(row)
-                    print(f"n={n:,}, repeat={rep + 1}, {row['tree']}: "
-                          f"build={row['build_s']:.3f}s, height={row['height']}",
-                          flush=True)
-                f.flush()
-    print(f"Saved {dest}")
+    orders = ORDERS if args.order == "all" else (args.order,)
+    for order in orders:
+        dest = result_path(order)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with dest.open("w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=FIELDS)
+            writer.writeheader()
+            for n in SIZES:
+                make(n, order, SEED)  # Reuses an existing dataset automatically.
+                for rep in range(REPEATS):
+                    for row in bench(n, order, SEED, QUERIES, UPDATES, rep, SHRINK):
+                        writer.writerow(row)
+                        print(f"{order} n={n:,}, repeat={rep + 1}/{REPEATS}, "
+                              f"{row['tree']}: build={row['build_s']:.3f}s, "
+                              f"height={row['height']}", flush=True)
+                    f.flush()
+        print(f"Saved {dest}")
 
 
 if __name__ == "__main__":
