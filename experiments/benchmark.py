@@ -1,30 +1,42 @@
-"""Compare AVL, Treap, and Scapegoat on time, height, and search depth.
+"""Run three focused experiments comparing AVL, Treap, and Scapegoat trees.
 
-Run from project root:
-    python -m experiments.benchmark --sizes 10000 100000 --order random --repeats 3
-    python -m experiments.benchmark --sizes 10000 --order random --shrink
-AI-assisted draft: review and disclose its use in the assignment.
+From the project root:
+    python3 -m experiments.benchmark
+
+Optional: run one experiment, or select insertion orders for Experiment 2:
+    python3 -m experiments.benchmark --experiment insertion-order --order ascending
+
+All dataset sizes, seeds, query counts and repetitions are set in the code.
+AI-assisted revision: review and disclose its use as required by the course.
 """
 
 import argparse
 import csv
 import gc
-import random
 from pathlib import Path
+import random
 from time import perf_counter
 
 from structures import TREE_TYPES, make_tree
-from structures.base import NULL
-from .dataset import ORDERS, make, load
+from .dataset import (
+    DELETION_SIZE, ORDERS, ORDER_SIZE, SCALING_SIZES, SEED, load, make,
+)
 
-FIELDS = ("tree", "order", "n", "seed", "repeat", "queries", "updates",
-          "build_s", "search_us", "insert_us", "delete_us", "height",
-          "mem_mib", "avg_depth", "height_60", "shrink_us")
+# Fixed experimental settings (no corresponding command-line arguments).
+REPEATS = 3
+SEARCH_QUERIES = 3_000
+DELETE_FRACTION = 0.60
+
+RESULT_FILE = Path("results") / "benchmarks.csv"
+FIELDS = (
+    "tree", "order", "n", "repeat", "seed", "build_s",
+    "search_hit_us", "height", "deleted", "bulk_delete_us", "height_after_delete",
+)
 
 
 def timed(fn, keys):
-    """Return batch execution time in seconds, excluding GC pauses."""
-    enabled = gc.isenabled()
+    """Call fn on each key and return elapsed seconds, excluding GC pauses."""
+    gc_was_on = gc.isenabled()
     gc.disable()
     try:
         start = perf_counter()
@@ -32,100 +44,149 @@ def timed(fn, keys):
             fn(key)
         return perf_counter() - start
     finally:
-        if enabled:
+        if gc_was_on:
             gc.enable()
 
 
-def depth(tree, keys):
-    """Return mean nodes visited when searching for existing keys."""
-    total = 0
-    for key in keys:
-        node = tree.root
-        while node != NULL:
-            total += 1
-            if key == tree.keys[node]:
-                break
-            node = tree.left[node] if key < tree.keys[node] else tree.right[node]
-        else:
-            raise AssertionError(f"Missing sampled key: {key}")
-    return total / len(keys)
+def measure(n, order, repeat, search=False, deletion=False, only_trees=None):
+    """Build each tree using identical keys; optionally search or bulk-delete."""
+    make(n, order, SEED)
+    keys = load(n, order, SEED)
+    rng = random.Random(SEED + 10_000 + repeat)
+    probes = [2 * rng.randrange(n) for _ in range(SEARCH_QUERIES)] if search else ()
 
+    delete_keys = ()
+    if deletion:
+        cut = int(n * DELETE_FRACTION)
+        # Same randomly ordered 60% subset for all trees in this repetition.
+        # Keeps deletions separate from the timed build and search operations.
+        delete_keys = [2 * i for i in rng.sample(range(n), cut)]
 
-def bench(n, order, seed, queries, updates, rep, shrink):
-    """Produce one benchmark row for each tree using identical operations."""
-    keys = load(n, order, seed)
-    rng = random.Random(seed + 1000 + rep)
-    lookups = [2 * rng.randrange(n) + (i % 2) for i in range(queries)]
-    count = min(updates, n)
-    added = [2 * i + 1 for i in rng.sample(range(n), count)]
-    removed = added.copy()
-    rng.shuffle(removed)
-    probes = [2 * rng.randrange(n) for _ in range(min(1000, n))]
-
-    for name in TREE_TYPES:
+    for name in (TREE_TYPES if only_trees is None else only_trees):
         gc.collect()
-        tree = make_tree(name, seed=seed + rep)
-        build = timed(tree.insert, keys)
-        if len(tree) != n:
-            raise AssertionError(f"{name}: build size mismatch")
+        tree = make_tree(name, seed=SEED + repeat)
+        build_s = timed(tree.insert, keys)
+        assert len(tree) == n, (name, "wrong number of keys after build")
         height = tree.height()
-        avg_depth = depth(tree, probes)
-        memory = tree.storage_bytes() / (1024 * 1024)
-        search = timed(tree.search, lookups)
-        insert = timed(tree.insert, added)
-        delete = timed(tree.delete, removed)
-        if len(tree) != n:
-            raise AssertionError(f"{name}: updates changed final size")
 
-        height_60, shrink_us = "", ""
-        if shrink:
-            cut = n * 60 // 100
-            if cut:
-                seconds = timed(tree.delete, range(0, 2 * cut, 2))
-                if len(tree) != n - cut:
-                    raise AssertionError(f"{name}: shrink size mismatch")
-                height_60 = tree.height()
-                shrink_us = round(seconds * 1e6 / cut, 4)
+        search_us = ""
+        if search:
+            search_us = round(timed(tree.search, probes) * 1e6 / len(probes), 4)
 
-        yield {"tree": name, "order": order, "n": n, "seed": seed,
-               "repeat": rep, "queries": queries, "updates": count,
-               "build_s": round(build, 6),
-               "search_us": round(search * 1e6 / queries, 4),
-               "insert_us": round(insert * 1e6 / count, 4),
-               "delete_us": round(delete * 1e6 / count, 4),
-               "height": height, "avg_depth": round(avg_depth, 3),
-               "mem_mib": round(memory, 3),
-               "height_60": height_60, "shrink_us": shrink_us}
+        removed = ""
+        delete_us = ""
+        remaining_height = ""
+        if deletion:
+            delete_us = round(timed(tree.delete, delete_keys) * 1e6 / len(delete_keys), 4)
+            removed = len(delete_keys)
+            assert len(tree) == n - removed, (name, "wrong number of keys after deletion")
+            remaining_height = tree.height()
+
+        record = {
+            "tree": name, "order": order, "n": n, "repeat": repeat + 1,
+            "seed": SEED, "build_s": round(build_s, 6),
+            "search_hit_us": search_us, "height": height,
+            "deleted": removed, "bulk_delete_us": delete_us,
+            "height_after_delete": remaining_height,
+        }
+        # Do not retain a large tree while saving its results.
+        del tree
+        gc.collect()
+        yield record
+
+
+def key_of(row):
+    """Unique identity of a measurement, independent of the metric columns."""
+    return row["tree"], row["order"], int(row["n"]), int(row["repeat"])
+
+
+def read_previous():
+    """Load existing data so interrupted experiments can continue."""
+    if not RESULT_FILE.exists():
+        return {}
+    with RESULT_FILE.open(newline="") as f:
+        return {key_of(row): row for row in csv.DictReader(f)}
+
+
+def save_records(records):
+    """Atomically save one row per tree/size/order/repetition."""
+    RESULT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = RESULT_FILE.with_suffix(".tmp")
+    with tmp.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=FIELDS)
+        writer.writeheader()
+        writer.writerows(records[k] for k in sorted(records))
+    tmp.replace(RESULT_FILE)
+
+
+def required_complete(row, need_search, need_delete):
+    """Check whether this record has all measurements needed for this run."""
+    return (row is not None
+            and row.get("build_s", "") != ""
+            and row.get("height", "") != ""
+            and (not need_search or row.get("search_hit_us", "") != "")
+            and (not need_delete or row.get("bulk_delete_us", "") != ""))
+
+
+def jobs(experiment, selected_orders):
+    """Combine overlapping experiments so random 1M trees are built once."""
+    planned = {}
+    if experiment in ("all", "scalability"):
+        for n in SCALING_SIZES:
+            planned[(n, "random")] = {"search": True, "delete": False}
+    if experiment in ("all", "insertion-order"):
+        for order in selected_orders:
+            planned.setdefault((ORDER_SIZE, order), {"search": False, "delete": False})
+    if experiment in ("all", "deletion"):
+        task = planned.setdefault((DELETION_SIZE, "random"),
+                                  {"search": False, "delete": False})
+        task["delete"] = True
+    return sorted(planned.items(), key=lambda entry: (entry[0][0], entry[0][1]))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--sizes", nargs="+", type=int, default=[10000, 100000])
-    parser.add_argument("--order", choices=ORDERS, default="random")
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--queries", type=int, default=3000)
-    parser.add_argument("--updates", type=int, default=1000)
-    parser.add_argument("--repeats", type=int, default=3)
-    parser.add_argument("--shrink", action="store_true", help="Also delete 60%% of original keys")
+    parser.add_argument("--experiment",
+                        choices=("all", "scalability", "insertion-order", "deletion"),
+                        default="all")
+    parser.add_argument("--order", choices=(*ORDERS, "all"), default="all",
+                        help="Which order(s) to test in the insertion-order experiment")
     args = parser.parse_args()
-    if any(n < 1 for n in args.sizes) or min(args.queries, args.updates, args.repeats) < 1:
-        parser.error("sizes, queries, updates and repeats must be positive")
+    selected_orders = ORDERS if args.order == "all" else (args.order,)
 
-    Path("results").mkdir(exist_ok=True)
-    dest = Path("results") / f"bench_{args.order}.csv"
-    with dest.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDS)
-        writer.writeheader()
-        for n in args.sizes:
-            make(n, args.order, args.seed)
-            print(f"Benchmark n={n:,}, order={args.order}", flush=True)
-            for rep in range(args.repeats):
-                for row in bench(n, args.order, args.seed, args.queries,
-                                 args.updates, rep, args.shrink):
-                    writer.writerow(row)
-                    print(f"  {row['tree']}: {row['build_s']:.4f}s, "
-                          f"height={row['height']}, depth={row['avg_depth']:.2f}")
-    print(f"Saved {dest}")
+    records = read_previous()
+    for (n, order), flags in jobs(args.experiment, selected_orders):
+        need_search, need_delete = flags["search"], flags["delete"]
+        for rep in range(REPEATS):
+            missing = [tree for tree in TREE_TYPES
+                       if not required_complete(records.get((tree, order, n, rep + 1)),
+                                                need_search, need_delete)]
+            if not missing:
+                print(f"Already measured: {order}, n={n:,}, repeat={rep + 1}", flush=True)
+                continue
+
+            print(f"Measuring {order}, n={n:,}, repeat={rep + 1}/{REPEATS}", flush=True)
+            for new in measure(n, order, rep, search=need_search,
+                               deletion=need_delete, only_trees=missing):
+                key = key_of(new)
+                old = records.get(key, {})
+                if required_complete(old, need_search, need_delete):
+                    continue
+                # Preserve previously measured search/deletion fields when adding
+                # another experiment to the same tree/size/order/repetition.
+                merged = dict(new)
+                for metric in ("build_s", "height", "search_hit_us", "deleted",
+                               "bulk_delete_us", "height_after_delete"):
+                    if old.get(metric, "") != "" and (metric in ("build_s", "height")
+                                                       or merged[metric] == ""):
+                        merged[metric] = old[metric]
+                records[key] = merged
+                save_records(records)
+                print(f"  {new['tree']}: build={new['build_s']:.3f}s, "
+                      f"height={new['height']}", flush=True)
+
+    print(f"Saved {RESULT_FILE}")
+    print("Next: python3 -m experiments.plot")
 
 
 if __name__ == "__main__":
