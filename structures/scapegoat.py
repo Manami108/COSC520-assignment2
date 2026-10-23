@@ -1,30 +1,25 @@
-"""Scapegoat ordered set: partial rebuilding with alpha = 2/3.
-
-Uses ordinary BST links and the packed storage from ``base.py``. Scapegoat
-nodes need no height or subtree-size metadata.
-"""
-
+# A Scapegoat Tree maintains balance by rebuilding subtrees. 
+# the temporary imbalance can happen and it rebuilds a subtree when an insertion exceeds the allowed depth.
 from array import array
 import math
-
 from .base import NULL, PackedBST
 
-
+# This is set to calculate the depth limit 
+# log_(3/2)(q)
 LOG_3_OVER_2 = math.log(1.5)
 
-
 class ScapegoatTree(PackedBST):
-    """Scapegoat BST: worst-case logarithmic search, amortized updates."""
 
     def __init__(self):
-        """Input: none. Output: an empty Scapegoat Tree."""
+        # Input: none
+        # Output: an empty Scapegoat Tree
         super().__init__()
-        # q counts successful insertions since the last full rebuild, plus
-        # the size at that rebuild. It is an upper bound on the live-node count.
+        # q counts successful insertions since the last full rebuild, plus the size at that rebuild
         self.max_size = 0
 
     def _subtree_size(self, node):
-        """Input: subtree root. Output: number of nodes in that subtree."""
+        # Input: subtree root
+        # Output: number of nodes in that subtree
         if node == NULL:
             return 0
         count = 0
@@ -39,17 +34,15 @@ class ScapegoatTree(PackedBST):
         return count
 
     def _rebuild(self, node):
-        """Input: subtree root. Output: none; rebuild it into balanced form.
-
-        Reuses the existing node indices, preserving parent links and the
-        surrounding tree. An iterative rebuild avoids Python recursion limits.
-        """
+        # Input: subtree root
+        # Output: none
+        # The code rebuilds the subtrees into a balanced BST using sorted node indices
         if node == NULL:
             return
         parent = self.parent[node]
         was_left = parent != NULL and self.left[parent] == node
 
-        # Collect nodes in increasing key order, without copying their keys.
+        # The code ollects nodes in increasing key order without copying their keys
         ordered = array("i")
         stack = []
         current = node
@@ -61,7 +54,7 @@ class ScapegoatTree(PackedBST):
             ordered.append(current)
             current = self.right[current]
 
-        # Divide the sorted indices around each median (iterative recursion).
+        # The code divide the sorted indices around each median (iterative recursion) to restore the balance
         pending = [(0, len(ordered), parent, was_left)]
         while pending:
             begin, end, parent, is_left = pending.pop()
@@ -82,7 +75,8 @@ class ScapegoatTree(PackedBST):
             pending.append((begin, middle, current, True))
 
     def insert(self, key):
-        """Input: integer key. Output: True if added, False if duplicate."""
+        # Input: integer key 
+        # Output: True if added and false if duplicate
         self._check_key(key)
         found, parent = self._find(key)
         if found != NULL:
@@ -95,7 +89,9 @@ class ScapegoatTree(PackedBST):
         else:
             self.right[parent] = node
         self.max_size += 1
-
+        
+        # the code checks the depth limit (depth <= log_(3/2)(q)).
+        # If exceeded the limit, a scapegoat ancestor must be found and rebuilt.
         depth = 0
         current = node
         while self.parent[current] != NULL:
@@ -104,9 +100,8 @@ class ScapegoatTree(PackedBST):
         if depth <= math.log(self.max_size) / LOG_3_OVER_2 + 1e-12:
             return True
 
-        # Find the first ancestor with a child occupying > 2/3 of its nodes.
-        # Along this path the sibling subtrees are disjoint: calculating their
-        # sizes costs O(size of the eventually rebuilt subtree) in total.
+        # The code finds the first ancestor with a child occupying > 2/3 of its nodes
+        # Along this path the sibling subtrees are disjoint: calculating their sizes costs O(size of the eventually rebuilt subtree) in total.
         child = node
         child_size = 1
         while self.parent[child] != NULL:
@@ -120,7 +115,8 @@ class ScapegoatTree(PackedBST):
         raise AssertionError("Insertion exceeded the height bound without a scapegoat")
 
     def delete(self, key):
-        """Input: integer key. Output: True if removed, False if absent."""
+        # Input: integer key
+        # Output: True if removed and false if absent.
         self._check_key(key)
         node, _ = self._find(key)
         if node == NULL:
@@ -135,7 +131,8 @@ class ScapegoatTree(PackedBST):
         self._replace(node, child)
         self._release(node)
 
-        # Full rebuilding after enough deletions bounds height by O(log n).
+        # This code is doing full rebuilding after enough deletions bounds height by O(log n)
+        # Full rebuild condition is 2*n < q, where n is the current size
         if 2 * self.size < self.max_size:
             if self.root != NULL:
                 self._rebuild(self.root)
