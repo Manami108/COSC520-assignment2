@@ -44,35 +44,42 @@ The three binary search trees are:
 
 ## Requirements and Running Instructions
 
-This project was developed using Python 3.12. The benchmark results are visualized using `matplotlib`. If it is not installed, it can be installed using:
+This project was developed using Python 3.12. The benchmark results are visualized using `matplotlib`.
+
+To install the required packages, I recommend creating a virtual environment first:
 
 ```bash
-pip install matplotlib
+python3 -m venv .venv # Create a virtual environment
+
+source .venv/bin/activate # Activate the environment (macOS/Linux)
+
+python -m pip install -r requirements.txt # Install the required packages
 ```
 
-All commands should be executed from the project root directory.
+All commands should be executed from the project root directory with the virtual environment activated.
 
 To run the unit tests:
 
 ```bash
-python3 -m unittest tests.tests -v
+python -m unittest tests.tests -v
 ```
 
 To run the basic demonstration of the three trees:
 
 ```bash
-python3 -m experiments.demo
+python -m experiments.demo
 ```
 
 To run benchmark experiments:
 
 ```bash
-python3 -m experiments.benchmark # All experiments
+python -m experiments.benchmark # All experiments
 
-# Individual experiments can also be executed separately
-python3 -m experiments.benchmark --experiment scalability # Scalability experiment
-python3 -m experiments.benchmark --experiment insertion-order # Insertion order experiment
-python3 -m experiments.benchmark --experiment deletion # Bulk deletion experiment
+python -m experiments.benchmark --experiment scalability # Scalability experiment
+
+python -m experiments.benchmark --experiment insertion-order # Insertion order experiment
+
+python -m experiments.benchmark --experiment deletion # Bulk deletion experiment
 ```
 
 For the insertion-order experiment, you can select a specific order using `--order ascending`, `--order descending`, or `--order random`. By default, it includes all three insertion orders.
@@ -80,10 +87,32 @@ For the insertion-order experiment, you can select a specific order using `--ord
 To generate the figures and tables after benchmarking:
 
 ```bash
-python3 -m experiments.plot
+python -m experiments.plot
 ```
 
-The script generates datasets automatically and reuses them when existing files are the expected size. 
+The script automatically generates datasets and reuses them when existing files are the expected size.
+
+### Re-running the Experiments
+
+To save time, the benchmark also checks whether previous measurements are available in `results/benchmarks.csv`. If the required measurements have already been completed, you may see messages such as:
+
+```text
+Already measured: random, n=1,000, repeat=1
+Already measured: random, n=1,000, repeat=2
+Already measured: random, n=1,000, repeat=3
+Saved results/benchmarks.csv
+```
+
+No worries! This means the results are already available, so the benchmark skips those measurements instead of rerunning them.
+
+If you would like to run all experiments from scratch, you can back up the existing results before running the benchmark again:
+
+```bash
+mv results/benchmarks.csv results/benchmarks_backup.csv
+python -m experiments.benchmark
+```
+
+Please note that experiments involving 10 million keys may require substantial memory and execution time, depending on your computer's resources, so be aware of this before running them.
 
 ## Generated Files
 
@@ -129,8 +158,6 @@ The experiments are configured as follows:
 The bulk deletion experiment randomly selects and removes 60% of the original keys. Successful search performance is evaluated using 50,000 queries.
 
 Each experiment is repeated three times, and a fixed random seed is used for reproducibility. The summary tables and plots report the median of the available repetitions.
-
-!! Experiments involving 10 million keys can be computationally expensive depending on your computer's resources, so please be aware of this before running them. 
 
 ## Results
 
