@@ -1,14 +1,9 @@
-"""Small demonstration of the three ordered-set implementations.
-
-Run from project root: python -m experiments.demo
-AI-assisted draft: review and disclose its use in the assignment.
-"""
-
+# this is a small demonstration of the three ordered-set implementations.
 from structures import TREE_TYPES, make_tree
 
-
 def main():
-    """Input: none. Output: example results for insert/search/delete."""
+    # Input: none
+    # Output: example results for insert, search and delete
     for name in TREE_TYPES:
         tree = make_tree(name)
         for key in (40, 20, 60, 10, 30, 50, 70):
@@ -23,7 +18,6 @@ def main():
         print("After delete:", list(tree.inorder()))
         print("Height:", tree.height())
         print("Array storage (bytes):", tree.storage_bytes())
-
 
 if __name__ == "__main__":
     main()
