@@ -131,4 +131,4 @@ The generated figures compare the three tree implementations using the same colo
 
 If you want to review the experimental results without running the benchmarks (which is perfectly fine too!), you can check the generated figures and CSV tables in the `results/` directory.
 
-See you in the next project!
+### See you in the next project!
