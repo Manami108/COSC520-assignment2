@@ -55,8 +55,6 @@ source .venv/bin/activate # Activate the environment (macOS/Linux)
 python -m pip install -r requirements.txt # Install the required packages
 ```
 
-All commands should be executed from the project root directory with the virtual environment activated.
-
 To run the unit tests:
 
 ```bash
@@ -89,8 +87,6 @@ To generate the figures and tables after benchmarking:
 python -m experiments.plot
 ```
 
-The script automatically generates datasets and reuses them when existing files are the expected size.
-
 ### Re-running the Experiments
 
 To save time, the benchmark also checks whether previous measurements are available in `results/benchmarks.csv`. If the required measurements have already been completed, you may see messages such as:
@@ -102,7 +98,7 @@ Already measured: random, n=1,000, repeat=3
 Saved results/benchmarks.csv
 ```
 
-Please don't panic! :) This means the results are already available, so the benchmark skips those measurements instead of rerunning them. If you would like to run all experiments from scratch, you can back up the existing results before running the benchmark again:
+Please don't panic! :) This means the results are already available, so the benchmark skips those measurements instead of rerunning them. If you would like to run all experiments from the start, you can back up the existing results before running the benchmark again:
 
 ```bash
 mv results/benchmarks.csv results/benchmarks_backup.csv
@@ -151,8 +147,6 @@ The experiments are configured as follows:
 | Insertion order | 10,000,000 keys | Build time, tree height |
 | Bulk deletion | 10,000,000 keys | Average deletion time, tree height before and after deletion |
 | Memory usage | 10,000,000 keys | Allocated tree-array storage |
-
-The bulk deletion experiment randomly selects and removes 60% of the original keys. Successful search performance is evaluated using 50,000 queries. Each experiment is repeated three times, and a fixed random seed is used for reproducibility. The summary tables and plots report the median of the available repetitions.
 
 ## Results
 
