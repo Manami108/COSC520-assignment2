@@ -97,7 +97,7 @@ The following sizes and settings are fixed in the Python files and do not need c
 In `experiments/dataset.py`:
 
 ```python
-SIZES = (100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000)
+SIZES = (1_000, 10_000, 100_000, 1_000_000, 10_000_000)
 SEED = 42
 ```
 
@@ -105,7 +105,7 @@ In `experiments/benchmark.py`:
 
 ```python
 REPEATS = 3
-QUERIES = 3_000
+QUERIES = 50_000
 UPDATES = 1_000
 SHRINK = True
 ```
