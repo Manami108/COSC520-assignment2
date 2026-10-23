@@ -19,9 +19,9 @@ SEED = 42
 # Experiment 1: random insertion with increasing dataset sizes.
 SCALING_SIZES = (1_000, 10_000, 100_000, 1_000_000, 10_000_000)
 
-# Experiments 2 and 3: fixed-size comparisons; no 10M bulk deletions.
-ORDER_SIZE = 10_000_000
-DELETION_SIZE = 10_000_000
+# Experiments 2 and 3: fixed-size comparisons; no 1M bulk deletions.
+ORDER_SIZE = 1_000_000
+DELETION_SIZE = 1_000_000
 
 
 def path(n, order, seed=SEED, folder=DATA_DIR):

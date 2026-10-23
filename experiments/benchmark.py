@@ -24,13 +24,14 @@ from .dataset import (
 
 # Fixed experimental settings (no corresponding command-line arguments).
 REPEATS = 3
-SEARCH_QUERIES = 3_000
+SEARCH_QUERIES = 50_000
 DELETE_FRACTION = 0.60
 
 RESULT_FILE = Path("results") / "benchmarks.csv"
 FIELDS = (
     "tree", "order", "n", "repeat", "seed", "build_s",
-    "search_hit_us", "height", "deleted", "bulk_delete_us", "height_after_delete",
+    "search_hit_us", "height", "memory_mib", "deleted", "bulk_delete_us",
+    "height_after_delete",
 )
 
 
@@ -48,8 +49,9 @@ def timed(fn, keys):
             gc.enable()
 
 
-def measure(n, order, repeat, search=False, deletion=False, only_trees=None):
-    """Build each tree using identical keys; optionally search or bulk-delete."""
+def measure(n, order, repeat, search=False, deletion=False, memory=False,
+            only_trees=None, previous=None):
+    """Build each tree using identical keys; optionally measure memory or other metrics."""
     make(n, order, SEED)
     keys = load(n, order, SEED)
     rng = random.Random(SEED + 10_000 + repeat)
@@ -68,15 +70,19 @@ def measure(n, order, repeat, search=False, deletion=False, only_trees=None):
         build_s = timed(tree.insert, keys)
         assert len(tree) == n, (name, "wrong number of keys after build")
         height = tree.height()
+        # Measure tree-array storage immediately after build, before deletion.
+        memory_mib = round(tree.storage_bytes() / (1024 ** 2), 3) if memory else ""
 
+        # Avoid redoing costly searches/deletions if only memory is missing.
+        old = (previous or {}).get((name, order, n, repeat + 1), {})
         search_us = ""
-        if search:
+        if search and old.get("search_hit_us", "") == "":
             search_us = round(timed(tree.search, probes) * 1e6 / len(probes), 4)
 
         removed = ""
         delete_us = ""
         remaining_height = ""
-        if deletion:
+        if deletion and old.get("bulk_delete_us", "") == "":
             delete_us = round(timed(tree.delete, delete_keys) * 1e6 / len(delete_keys), 4)
             removed = len(delete_keys)
             assert len(tree) == n - removed, (name, "wrong number of keys after deletion")
@@ -86,7 +92,7 @@ def measure(n, order, repeat, search=False, deletion=False, only_trees=None):
             "tree": name, "order": order, "n": n, "repeat": repeat + 1,
             "seed": SEED, "build_s": round(build_s, 6),
             "search_hit_us": search_us, "height": height,
-            "deleted": removed, "bulk_delete_us": delete_us,
+            "memory_mib": memory_mib, "deleted": removed, "bulk_delete_us": delete_us,
             "height_after_delete": remaining_height,
         }
         # Do not retain a large tree while saving its results.
@@ -119,13 +125,14 @@ def save_records(records):
     tmp.replace(RESULT_FILE)
 
 
-def required_complete(row, need_search, need_delete):
+def required_complete(row, need_search, need_delete, need_memory):
     """Check whether this record has all measurements needed for this run."""
     return (row is not None
             and row.get("build_s", "") != ""
             and row.get("height", "") != ""
             and (not need_search or row.get("search_hit_us", "") != "")
-            and (not need_delete or row.get("bulk_delete_us", "") != ""))
+            and (not need_delete or row.get("bulk_delete_us", "") != "")
+            and (not need_memory or row.get("memory_mib", "") != ""))
 
 
 def jobs(experiment, selected_orders):
@@ -157,26 +164,29 @@ def main():
     records = read_previous()
     for (n, order), flags in jobs(args.experiment, selected_orders):
         need_search, need_delete = flags["search"], flags["delete"]
+        # Only compare storage at 1M keys with random insertion.
+        need_memory = (n == ORDER_SIZE and order == "random")
         for rep in range(REPEATS):
             missing = [tree for tree in TREE_TYPES
                        if not required_complete(records.get((tree, order, n, rep + 1)),
-                                                need_search, need_delete)]
+                                                need_search, need_delete, need_memory)]
             if not missing:
                 print(f"Already measured: {order}, n={n:,}, repeat={rep + 1}", flush=True)
                 continue
 
             print(f"Measuring {order}, n={n:,}, repeat={rep + 1}/{REPEATS}", flush=True)
             for new in measure(n, order, rep, search=need_search,
-                               deletion=need_delete, only_trees=missing):
+                               deletion=need_delete, memory=need_memory,
+                               only_trees=missing, previous=records):
                 key = key_of(new)
                 old = records.get(key, {})
-                if required_complete(old, need_search, need_delete):
+                if required_complete(old, need_search, need_delete, need_memory):
                     continue
                 # Preserve previously measured search/deletion fields when adding
                 # another experiment to the same tree/size/order/repetition.
                 merged = dict(new)
-                for metric in ("build_s", "height", "search_hit_us", "deleted",
-                               "bulk_delete_us", "height_after_delete"):
+                for metric in ("build_s", "height", "search_hit_us", "memory_mib",
+                               "deleted", "bulk_delete_us", "height_after_delete"):
                     if old.get(metric, "") != "" and (metric in ("build_s", "height")
                                                        or merged[metric] == ""):
                         merged[metric] = old[metric]
@@ -186,8 +196,6 @@ def main():
                       f"height={new['height']}", flush=True)
 
     print(f"Saved {RESULT_FILE}")
-    print("Next: python3 -m experiments.plot")
-
 
 if __name__ == "__main__":
     main()

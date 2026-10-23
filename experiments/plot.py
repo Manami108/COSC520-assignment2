@@ -144,6 +144,7 @@ def save_tables(stats):
                     by_order)
 
     deletion = []
+    memory = []
     for tree in TREES:
         values = stats.get((tree, "random", DELETION_SIZE))
         if values and values["bulk_delete_us"] != "":
@@ -153,6 +154,13 @@ def save_tables(stats):
                              "height_before": values["height"],
                              "height_after": values["height_after_delete"],
                              "repeats": values["repeats"]})
+    if memory:
+        write_table(
+            "memory_usage.csv",
+            ("n", "tree", "memory_mib", "repeats"),
+            memory,
+        )
+        
     if deletion:
         write_table("bulk_deletion.csv",
                     ("n", "tree", "deleted", "deletion_us", "height_before",
@@ -160,8 +168,6 @@ def save_tables(stats):
 
 
 def main():
-    if not RESULT_FILE.exists():
-        raise SystemExit("No benchmark results yet. Run: python3 -m experiments.benchmark")
     stats = summaries(read_rows())
     plot_scaling(stats)
     save_tables(stats)
