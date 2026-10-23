@@ -1,172 +1,134 @@
-# COSC 520 Assignment 2 — Advanced Data Structures
+# COSC 520 Assignment 2 
 
-Comparison of three binary search trees implemented in Python: **AVL Tree, Treap, and Scapegoat Tree**.
+Hi! Welcome back to my GitHub repository <3
 
-The experiments compare running time, tree height, average search depth, and memory usage across different dataset sizes and insertion orders.
+This repository contains the implementation and experimental comparison of three self-balancing binary search trees (**AVL Tree**, **Treap**, and **Scapegoat Tree**).
 
-## Project Structure
+All algorithms and data structures were implemented from scratch in Python.
+The experiments compare performance in execution time, tree height, and memory usage across different dataset sizes and insertion orders.
+
+## Repository Structure
 
 ```text
-structures/         AVL, Treap, Scapegoat, and shared BST code
-experiments/
-  dataset.py        Generate datasets
-  benchmark.py      Run performance experiments
-  plot.py           Generate figures and a summary table
-  demo.py           Basic demonstration
-tests/
-  tests.py          Unit tests
-data/               Generated datasets
-results/            Benchmark CSVs, summary table, and figures
+COSC520-assignment2/
+│
+├── structures/
+│   ├── __init__.py
+│   ├── base.py
+│   ├── avl.py
+│   ├── treap.py
+│   └── scapegoat.py
+│
+├── experiments/
+│   ├── __init__.py
+│   ├── dataset.py
+│   ├── benchmark.py
+│   ├── plot.py
+│   └── demo.py
+│
+├── tests/
+│   ├── __init__.py
+│   └── tests.py
+│
+├── data/
+├── results/
+└── README.md
 ```
 
-## Requirements
+## Requirements and Running Instructions
 
-- Python 3.12+
-- Matplotlib (for plotting)
+This project was developed using Python 3.12. The benchmark results are visualized using `matplotlib`. If it is not installed, it can be installed using:
 
 ```bash
-python3 -m pip install matplotlib
+pip install matplotlib
 ```
 
-Run all commands **from the project root**.
+All commands should be executed from the project root directory.
 
-## How to Run
-
-### 1. Unit Tests
+To run the unit tests:
 
 ```bash
 python3 -m unittest tests.tests -v
 ```
 
-### 2. Demonstration
+To run the basic demonstration of the three trees:
 
 ```bash
 python3 -m experiments.demo
 ```
 
-### 3. Run Benchmarks
-
-Dataset sizes and experiment settings are defined in the code. **Only insertion order needs to be selected.**
-
-**Random insertion (default):**
+To run benchmark experiments:
 
 ```bash
-python3 -m experiments.benchmark
+python3 -m experiments.benchmark # All experiments
+
+# Individual experiments can also be executed separately
+python3 -m experiments.benchmark --experiment scalability # Scalability experiment
+python3 -m experiments.benchmark --experiment insertion-order # Insertion order experiment
+python3 -m experiments.benchmark --experiment deletion # Bulk deletion experiment
 ```
 
-**Ascending insertion:**
+For the insertion-order experiment, you can select a specific order using `--order ascending`, `--order descending`, or `--order random`. By default, it includes all three insertion orders.
 
-```bash
-python3 -m experiments.benchmark --order ascending
-```
-
-**Descending insertion:**
-
-```bash
-python3 -m experiments.benchmark --order descending
-```
-
-**All three insertion orders:**
-
-```bash
-python3 -m experiments.benchmark --order all
-```
-
-Datasets are generated automatically and reused when an existing file has the expected size. There is no need to run `dataset.py` separately.
-
-### 4. Generate Plots and Summary Table
-
-After running the benchmarks:
+To generate the figures and tables after benchmarking:
 
 ```bash
 python3 -m experiments.plot
 ```
 
-This generates figures for every insertion order with an available benchmark CSV, along with a median-results table. To plot only one insertion order:
+The script generates datasets automatically and reuses them when existing files are the expected size. 
 
-```bash
-python3 -m experiments.plot --order random
+## Generated Files
+
+Running the experiments generates the following files:
+
+- `data/*.bin` — generated datasets
+- `results/benchmarks.csv` — raw benchmark measurements from individual repetitions
+- `results/figures/build_time.png` — comparison of tree construction time
+- `results/figures/search_time.png` — comparison of successful search time
+- `results/figures/tree_height.png` — comparison of tree height
+
+The following summary tables are also generated in `results/tables/`:
+
+- `scalability.csv` — performance across increasing dataset sizes
+- `insertion_order.csv` — comparison of random, ascending, and descending insertions
+- `memory_usage.csv` — allocated tree-array memory comparison
+- `bulk_deletion.csv` — deletion time and tree height before and after deletion
+
+## Dataset
+
+The experiments use synthetic datasets of distinct, signed 64-bit even integers starting at 0.
+
+To give an example:
+
+```text
+0
+2
+4
+6
+8
+10
 ```
 
-No bar charts are generated. The former insertion-order bar chart has been replaced by a CSV summary that can be used to create tables for the report.
+The experiments are configured as follows:
 
-## Experiment Settings
+| Experiment | Dataset | Measurements |
+|---|---|---|
+| Scalability | 1,000 to 10,000,000 keys | Build time, successful search time, tree height |
+| Insertion order | 10,000,000 keys | Build time, tree height |
+| Bulk deletion | 10,000,000 keys | Average deletion time, tree height before and after deletion |
+| Memory usage | 10,000,000 keys | Allocated tree-array storage |
 
-The following sizes and settings are fixed in the Python files and do not need command-line arguments.
+The bulk deletion experiment randomly selects and removes 60% of the original keys. Successful search performance is evaluated using 50,000 queries.
 
-In `experiments/dataset.py`:
+Each experiment is repeated three times, and a fixed random seed is used for reproducibility. The summary tables and plots report the median of the available repetitions.
 
-```python
-SIZES = (1_000, 10_000, 100_000, 1_000_000, 10_000_000)
-SEED = 42
-```
-
-In `experiments/benchmark.py`:
-
-```python
-REPEATS = 3
-QUERIES = 50_000
-UPDATES = 1_000
-SHRINK = True
-```
-
-Each dataset contains distinct even-numbered 64-bit integers. Random, ascending, and descending datasets contain the same keys, differing in insertion order. The random dataset uses a fixed seed; the three repetitions reuse its insertion order but vary the sampled queries and Treap random seed.
-
-For a smaller trial run, temporarily edit `SIZES` in `dataset.py`, then restore the full list before final benchmarking. The 10-million-key experiments may require substantial memory and execution time.
-
-## Evaluation
-
-| Experiment | Measurements |
-|---|---|
-| Performance and scaling | Build time, successful and unsuccessful search, insertion, deletion |
-| Tree structure | Height, average successful-search depth, allocated tree-array storage |
-| Insertion order | Random, ascending, descending |
-| Bulk deletion | Average time to remove 60% of original keys and resulting tree height |
-
-- **Build time:** Time required to insert all original keys, measured in seconds.
-- **Search:** Average time per successful or unsuccessful query, measured in microseconds. Unsuccessful searches use absent odd-numbered keys.
-- **Insertion and deletion:** Average time per operation for up to 1,000 temporary odd-numbered keys. The ordinary deletion test removes those newly inserted keys.
-- **Bulk deletion:** Removes 60% of the original keys, spread across the key range and deleted in increasing-key order. This is not a random-deletion workload.
-- **Tree structure:** Height, average successful-search depth, and storage are measured immediately after the initial build, before the update experiments.
-- **Memory:** Reports allocated tree-array storage (`tree.storage_bytes()`), not total Python process memory.
-
-Each measurement is repeated three times. The plot values and summary table use the **median** of those repetitions.
-
-## Figures
-
-The plotting script generates two figures per insertion order:
-
-1. **Timing (`times_*.png`):** Build time, successful search, unsuccessful search, insertion, deletion, and 60% bulk deletion.
-2. **Structure (`structure_*.png`):** Tree height, average successful-search depth, and allocated array storage.
-
-The tree colors are consistent across all plots: **red for AVL, blue for Treap, and green for Scapegoat**. Dataset size uses a logarithmic x-axis. Build time and storage also use logarithmic y-axes.
-
-The height plot includes a gray dashed `log₂(n + 1)` reference curve to help visualize logarithmic height growth; it is not a fourth algorithm or measured result.
+!! Experiments involving 10 million keys may require substantial memory and execution time, depending on your computer's resources, so please be aware of this before running them. !!
 
 ## Results
 
-Raw benchmark results are saved as:
+The generated figures compare the three tree implementations using the same colors (**red for AVL, blue for Treap, and green for Scapegoat**).
 
-```text
-results/
-  bench_random.csv
-  bench_ascending.csv
-  bench_descending.csv
-  summary.csv
-```
+If you want to review the experimental results without running the benchmarks (which is perfectly fine too!), you can check the generated figures and CSV tables in the `results/` directory.
 
-Each `bench_*.csv` file records individual repetitions. `summary.csv` contains median values grouped by insertion order, tree, and dataset size.
-
-Figures are saved as:
-
-```text
-results/figures/
-  times_random.png
-  structure_random.png
-  times_ascending.png
-  structure_ascending.png
-  times_descending.png
-  structure_descending.png
-```
-
-Only files for completed insertion orders are created. Running the benchmark again for an insertion order **overwrites that order's existing CSV**. Running the plot script again **overwrites `summary.csv`** with the data for the insertion orders selected in that plotting run.
+See you in the next project!
