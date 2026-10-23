@@ -19,19 +19,19 @@ SEED = 42
 # Experiment 1: random insertion with increasing dataset sizes.
 SCALING_SIZES = (1_000, 10_000, 100_000, 1_000_000, 10_000_000)
 
-# Experiments 2 and 3: fixed-size comparisons; no 1M bulk deletions.
-ORDER_SIZE = 1_000_000
-DELETION_SIZE = 1_000_000
+# Experiments 2 and 3: fixed-size comparisons at 10M keys.
+ORDER_SIZE = 10_000_000
+DELETION_SIZE = 10_000_000
 
 
-def path(n, order, seed=SEED, folder=DATA_DIR):
-    """Return the binary dataset path for size, order, and seed."""
-    return Path(folder) / f"keys_{order}_{n}_s{seed}.bin"
+def path(n, order, folder=DATA_DIR):
+    """Return the binary dataset path."""
+    return Path(folder) / f"{order}_{n}.bin"
 
 
 def make(n, order="random", seed=SEED, folder=DATA_DIR):
     """Write n unique even signed 64-bit keys; reuse existing data files."""
-    dest = path(n, order, seed, folder)
+    dest = path(n, order, folder)
     if dest.exists() and dest.stat().st_size == n * 8:
         return dest
 
@@ -56,7 +56,7 @@ def make(n, order="random", seed=SEED, folder=DATA_DIR):
 def load(n, order="random", seed=SEED, folder=DATA_DIR):
     """Return keys in insertion order as a compact 64-bit integer array."""
     keys = array("q")
-    with path(n, order, seed, folder).open("rb") as f:
+    with path(n, order, folder).open("rb") as f:
         keys.fromfile(f, n)
     return keys
 

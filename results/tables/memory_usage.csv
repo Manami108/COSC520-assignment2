@@ -1,0 +1,4 @@
+n,tree,memory_mib,repeats
+10000000,AVL,234.434,3
+10000000,Treap,273.506,3
+10000000,Scapegoat,195.361,3
