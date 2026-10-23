@@ -34,6 +34,13 @@ COSC520-assignment2/
 ├── results/
 └── README.md
 ```
+## Implementations
+
+The three binary search trees are:
+
+- **AVL Tree:** It maintains height balance through rotations after insertion and deletion.
+- **Treap:** It combines the binary search tree property with randomly assigned priorities to maintain a heap structure.
+- **Scapegoat Tree:** It restores balance by rebuilding subtrees when certain conditions are met.
 
 ## Requirements and Running Instructions
 
@@ -123,12 +130,12 @@ The bulk deletion experiment randomly selects and removes 60% of the original ke
 
 Each experiment is repeated three times, and a fixed random seed is used for reproducibility. The summary tables and plots report the median of the available repetitions.
 
-!! Experiments involving 10 million keys may require substantial memory and execution time, depending on your computer's resources, so please be aware of this before running them. !!
+!! Experiments involving 10 million keys can be computationally expensive depending on your computer's resources, so please be aware of this before running them. 
 
 ## Results
 
 The generated figures compare the three tree implementations using the same colors (**red for AVL, blue for Treap, and green for Scapegoat**).
 
-If you want to review the experimental results without running the benchmarks (which is perfectly fine too!), you can check the generated figures and CSV tables in the `results/` directory.
+If you would rather skip the benchmarks (which is perfectly fine!), you can check the generated figures and CSV tables in the `results/` directory.
 
 ### See you in the next project!
