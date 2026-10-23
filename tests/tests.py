@@ -1,4 +1,4 @@
-# Unit tests for AVL, Treap, and Scapegoat trees.
+# Unit tests for AVL, Treap, and Scapegoat trees
 import math
 import random
 import unittest
@@ -296,7 +296,6 @@ class TreeTests(unittest.TestCase):
         for key in range(16, 31):
             self.assertTrue(tree.delete(key))
         self.check(tree, set())
-
 
 if __name__ == "__main__":
     unittest.main()
