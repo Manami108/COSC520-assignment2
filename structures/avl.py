@@ -1,58 +1,71 @@
-"""AVL ordered set: explicit height maintenance and single/double rotations."""
-
+# AVL Tree strictly maintain the balance using rotations to keep the height difference of each node within [-1, 1].
+# Single rotations handle LL and RR cases, while double rotations
+# handle LR and RL cases.
 from .base import NULL, PackedBST
 
-
 class AVLTree(PackedBST):
-    """Strict height balance gives worst-case O(log n) operations."""
-
     def __init__(self):
-        """Input: none. Output: an empty AVL tree with packed height metadata."""
+        # Input: none
+        # Output: an empty AVL tree with packed height metadata
         super().__init__("i")
 
     def _height(self, node):
-        """Input: node index. Output: height, using zero for an empty subtree."""
+        # Input: node index 
+        # Output: height using 0 for an empty subtree
         return 0 if node == NULL else self.meta[node]
 
     def _update_height(self, node):
-        """Input: live node. Output: none; recompute height from its children."""
+        # Input: live node
+        # Output: none
+        # the code computes height h(v) = 1 + max(h(left), h(right))
         self.meta[node] = 1 + max(self._height(self.left[node]), self._height(self.right[node]))
 
     def _balance_factor(self, node):
-        """Input: live node. Output: left height minus right height."""
+        # Input: live node 
+        # Output: left height - right height
         return self._height(self.left[node]) - self._height(self.right[node])
 
     def _rotate_left_avl(self, node):
-        """Input: node. Output: new subtree root after rotation/height repair."""
+        # Input: node 
+        # Output: new subtree root updated after rotation and height repair
+        # BF(v) = h(left) - h(right), where |BF(v)| <= 1
         root = self._rotate_left(node)
         self._update_height(node)
         self._update_height(root)
         return root
 
     def _rotate_right_avl(self, node):
-        """Input: node. Output: new subtree root after rotation/height repair."""
+        # Input: node 
+        # Output: new subtree root updated after rotation and height repair
         root = self._rotate_right(node)
         self._update_height(node)
         self._update_height(root)
         return root
 
     def _rebalance(self, node):
-        """Input: ancestor of a change. Output: none; repair up to the root."""
+        # Input: ancestor of a change
+        # Output: none
+        # This code repairs up to the root
         while node != NULL:
             self._update_height(node)
             balance = self._balance_factor(node)
             if balance > 1:
                 if self._balance_factor(self.left[node]) < 0:
+                    # LR case
                     self._rotate_left_avl(self.left[node])
+                # LL case
                 node = self._rotate_right_avl(node)
             elif balance < -1:
                 if self._balance_factor(self.right[node]) > 0:
+                    # RL case
                     self._rotate_right_avl(self.right[node])
                 node = self._rotate_left_avl(node)
+            # RR case
             node = self.parent[node]
 
     def insert(self, key):
-        """Input: integer key. Output: True if added, False for a duplicate."""
+        # Input: integer key 
+        # Output: True if added, and false for a duplicate
         self._check_key(key)
         found, parent = self._find(key)
         if found != NULL:
@@ -68,7 +81,8 @@ class AVLTree(PackedBST):
         return True
 
     def delete(self, key):
-        """Input: integer key. Output: True if removed, False if absent."""
+        # Input: integer key 
+        # Output: True if removed and false if absent
         self._check_key(key)
         node, _ = self._find(key)
         if node == NULL:

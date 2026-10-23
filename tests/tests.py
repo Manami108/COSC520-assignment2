@@ -1,9 +1,4 @@
-"""Unit tests for AVL, Treap, and Scapegoat trees.
-
-Run from the project root: python -m unittest tests.tests -v
-Built-in set/sorted are test oracles, not tree implementations.
-"""
-
+# Unit tests for AVL, Treap, and Scapegoat trees
 import math
 import random
 import unittest
@@ -11,19 +6,19 @@ import unittest
 from structures import AVLTree, Treap, ScapegoatTree, TREE_TYPES, make_tree
 from structures.base import NULL, MIN_KEY, MAX_KEY
 
-
 class TreeTests(unittest.TestCase):
-    """Test shared BST behavior and each tree's balancing rules."""
-
     def check(self, tree, expected):
-        """Check live links and invariants before calling inorder/height."""
+        # Input: tree and expected set of keys
+        # Output: set of live node indices
+        # this block checks live links and invariants before calling inorder and height
         self.assertEqual(len(tree), len(expected))
         self.assertEqual(tree.root == NULL, not expected)
         count = len(tree.keys)
         self.assertEqual(len(tree.left), count)
         self.assertEqual(len(tree.right), count)
         self.assertEqual(len(tree.parent), count)
-
+        
+        # Each key has to satisfy lower bound < key < upper bound
         seen, height = set(), 0
         stack = [(tree.root, None, None, NULL, 1)]
         while stack:
@@ -57,10 +52,12 @@ class TreeTests(unittest.TestCase):
             self.treap(tree)
         elif isinstance(tree, ScapegoatTree):
             self.scapegoat(tree)
-        return seen  # Live node indices, useful for deletion tests.
+        return seen 
 
     def avl(self, tree):
-        """Check actual AVL heights and balance factors."""
+        # Input: AVL Tree
+        # Output: none
+        # This block checks actual AVL heights and balance factors (|h(left) - h(right)| <= 1) and verifies stored heights (h(v) = 1 + max(h(left), h(right)))
         heights = {NULL: 0}
         stack = [(tree.root, False)]
         while stack:
@@ -77,7 +74,10 @@ class TreeTests(unittest.TestCase):
             self.assertEqual(tree.meta[node], heights[node])
 
     def treap(self, tree):
-        """Check the Treap's min-heap priority rule."""
+        # Input: Treap
+        # Output: none
+        # This block checks the Treap's min-heap priority rule (rank(parent) <= rank(child))
+        # Rank is also compared
         stack = [tree.root]
         while stack:
             node = stack.pop()
@@ -92,7 +92,9 @@ class TreeTests(unittest.TestCase):
                     stack.append(child)
 
     def scapegoat(self, tree):
-        """Check the historical-size and logarithmic-depth bounds (alpha=2/3)."""
+        # Input: Scapegoat Tree
+        # Output: none
+        # this block checks the historical-size (n <= q <= 2n, where q is max_size) and logarithmic-depth bounds (height - 1 <= log_(3/2)(q)).
         if len(tree) == 0:
             self.assertEqual(tree.max_size, 0)
         else:
@@ -104,7 +106,7 @@ class TreeTests(unittest.TestCase):
             )
 
     def test_empty(self):
-        """Every registered tree supports the common interface and empty state."""
+        # This block checks the common interface and behavior of empty trees.
         self.assertEqual(set(TREE_TYPES), {"avl", "treap", "scapegoat"})
         for name in TREE_TYPES:
             with self.subTest(tree=name):
@@ -117,7 +119,7 @@ class TreeTests(unittest.TestCase):
                 self.check(tree, set())
 
     def test_insert_search(self):
-        """Insertion, membership, duplicates, and missing keys."""
+        # this block checks insertion, searching, duplicate keys, and missing keys.
         for name in TREE_TYPES:
             with self.subTest(tree=name):
                 tree = make_tree(name)
@@ -130,7 +132,7 @@ class TreeTests(unittest.TestCase):
                 self.check(tree, {5, 10, 15, 20, 30})
 
     def test_delete_cases(self):
-        """Delete live nodes with zero, one, and two children."""
+        # This block checks deletion of nodes with zero, one, and two children.
         keys = list(range(80))
         random.Random(7).shuffle(keys)
         for name in TREE_TYPES:
@@ -150,7 +152,7 @@ class TreeTests(unittest.TestCase):
                     self.check(tree, set(keys) - {key})
 
     def test_delete_root(self):
-        """Repeatedly delete the current root until empty."""
+        # Repeatedly delete the current root until empty.
         for name in TREE_TYPES:
             tree = make_tree(name)
             expected = set(range(30))
@@ -163,7 +165,8 @@ class TreeTests(unittest.TestCase):
                 self.check(tree, expected)
 
     def test_keys(self):
-        """64-bit boundary keys work; invalid types and values are rejected."""
+       # This block checks valid 64-bit boundary keys and rejects invalid inputs.
+       # Valid range is -2^63 <= key <= 2^63 - 1
         for name in TREE_TYPES:
             tree = make_tree(name)
             expected = {MIN_KEY, -1, 0, MAX_KEY}
@@ -179,7 +182,7 @@ class TreeTests(unittest.TestCase):
             self.check(tree, expected)
 
     def test_orders(self):
-        """Ascending, descending, and random insertions preserve all keys."""
+        # This block checks ascending, descending, and random insertion orders.
         shuffled = list(range(600))
         random.Random(42).shuffle(shuffled)
         for name in TREE_TYPES:
@@ -193,7 +196,7 @@ class TreeTests(unittest.TestCase):
                     self.check(tree, set(range(600)))
 
     def test_random(self):
-        """Check mixed operations against Python's set with fixed seeds."""
+        # This code check mixed operations against Python's set with fixed seeds.
         for name in TREE_TYPES:
             for seed in (11, 22, 33):
                 with self.subTest(tree=name, seed=seed):
@@ -214,7 +217,8 @@ class TreeTests(unittest.TestCase):
                     self.check(tree, expected)
 
     def test_reuse(self):
-        """Deleted node slots can be reused for later insertions."""
+        # this block checks that deleted node slots are reused during later insertions.
+        # The allocated key array should remain at 100 slots
         for name in TREE_TYPES:
             tree = make_tree(name)
             for cycle in range(3):
@@ -227,7 +231,7 @@ class TreeTests(unittest.TestCase):
                 self.check(tree, set())
 
     def test_avl_rotations(self):
-        """LL, RR, LR, and RL rotation cases produce the same root."""
+        # This block checks LL, RR, LR, and RL rotations using different insertion orders.
         for order in ((30, 20, 10), (10, 20, 30),
                       (30, 10, 20), (10, 30, 20)):
             with self.subTest(order=order):
@@ -238,7 +242,8 @@ class TreeTests(unittest.TestCase):
                 self.check(tree, {10, 20, 30})
 
     def test_avl_delete(self):
-        """Deletion restores AVL height balance."""
+        # This block checks that AVL balance is restored after deletion
+        # The balance factor must remain between -1 and 1.
         for order, removed in (([4, 2, 5, 1, 3], 5),
                                ([2, 1, 4, 3, 5], 1)):
             tree = AVLTree()
@@ -248,7 +253,7 @@ class TreeTests(unittest.TestCase):
             self.check(tree, set(order) - {removed})
 
     def test_treap_seed(self):
-        """The same seed and keys reproduce priorities and tree shape."""
+        # This block checks that identical seeds and keys reproduce the same
         a, b = Treap(seed=23), Treap(seed=23)
         for tree in (a, b):
             for key in (30, 10, 40, 5, 15, 35):
@@ -259,7 +264,7 @@ class TreeTests(unittest.TestCase):
         self.assertEqual(a.right, b.right)
 
     def test_scapegoat_insert(self):
-        """Sorted insertions cause rebuilding and retain logarithmic height."""
+        # This block checks that sorted insertions trigger subtree rebuilding.
         tree = ScapegoatTree()
         rebuilds = 0
         original = tree._rebuild
@@ -277,13 +282,13 @@ class TreeTests(unittest.TestCase):
         self.check(tree, set(range(500)))
 
     def test_scapegoat_delete(self):
-        """Large deletions trigger full rebuilding and size-counter reset."""
+        # This block checks the full rebuild condition (2n < q).
         tree = ScapegoatTree()
         for key in range(31):
             tree.insert(key)
         for key in range(15):
             self.assertTrue(tree.delete(key))
-        self.assertEqual(tree.max_size, 31)  # No full rebuild yet (n=16).
+        self.assertEqual(tree.max_size, 31)  # No rebuild yet (n=16, q=31).
         self.assertTrue(tree.delete(15))
         self.assertEqual(len(tree), 15)
         self.assertEqual(tree.max_size, 15)
@@ -291,7 +296,6 @@ class TreeTests(unittest.TestCase):
         for key in range(16, 31):
             self.assertTrue(tree.delete(key))
         self.check(tree, set())
-
 
 if __name__ == "__main__":
     unittest.main()
